@@ -15,6 +15,7 @@ import com.redis.lettucemod.search.SearchResults;
 import io.lettuce.core.RedisURI;
 
 import java.sql.Timestamp;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
@@ -45,12 +46,29 @@ public class Controller {
 
     @GetMapping("/getById")
     public String getPersonById(@RequestParam String id) {
-        String key_p = "People:" + id;
+        String hkey = "version:People:" + id;
+        String ver = commands.hget(hkey, "v");
+        String key_p = "People:" + id + ":" + ver;
         String person = commands.jsonGet(key_p, "$");
-        if (person == null) {
+        if (person == null ) {
             return "id not found";
-        } else {
-            return person;
+        } 
+        else {
+            try {
+                JSONArray array = new JSONArray(person);
+                JSONObject object = array.getJSONObject(0); 
+                Person p = new ObjectMapper().readValue(object.toString(), Person.class);
+                if (p.isActive()) {
+                    return person;
+                }
+                else {
+                    return "user is deleted";
+                }
+                } catch (Exception e) {
+                    System.out.println(e);
+                return "error";
+            }
+            
         }
        
     }
@@ -62,13 +80,16 @@ public class Controller {
             return "cannot create with id";
         }
         try {
+            String hkey = "version:People:" + p.getId();
+            commands.hset(hkey, "v", "1");
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             String time = timestamp.toString();
             p.setCreatedOn(time);
             p.setCreatedBy(user);
+            p.setActive(true);
             p_json = new ObjectMapper().writeValueAsString(p);
-            String pid = p.getId();
-            String key_p = "People:" + pid ;
+            String pid = p.getId();    
+            String key_p = "People:" + pid + ":1";
             commands.jsonSet(key_p, "$", p_json , SetMode.NX);
             return p_json;
         } catch (Exception e) {
@@ -100,11 +121,13 @@ public class Controller {
     @DeleteMapping("/deleteById")
     public String deletePersonById(@RequestParam String id) {
         
-        String key_p = "People:" + id ;
-        Long c = commands.jsonDel(key_p);
-        if (c == 0 ) {
+        String hkey = "version:People:" + id;
+        String ver = commands.hget(hkey, "v");
+        if (ver == null) {
             return "enter valid id";
         }
+        String key_p = "People:" + id + ":" + ver;
+        commands.jsonSet(key_p , "$.active" , "false");
         return "Deleted People : " + id;
     }
 
@@ -134,7 +157,9 @@ public class Controller {
 
     @PutMapping("/updateById")
     public String updatePersonById(@RequestParam String id ,@RequestParam String user ,@RequestBody(required = false) Map<String,Object> m) {
-        String key_p = "People:" + id ;
+        String hkey = "version:People:" + id;
+        String ver = commands.hget(hkey, "v");
+        String key_p = "People:" + id + ":" + ver;
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
         String time = timestamp.toString();
         try {
@@ -179,13 +204,16 @@ public class Controller {
 
     @PutMapping("/updateEntireById")
     public String updatePersonFullById(@RequestParam String id ,@RequestParam String user ,@RequestBody(required = false) Map<String,Object> m) {
-        String key_p = "People:" + id ;
+        String hkey = "version:People:" + id;
+        String ver = commands.hget(hkey, "v");
+        String key_p = "People:" + id + ":" + ver;
         Object[] keys = m.keySet().toArray();
         String p = commands.jsonGet(key_p, "$");
         try {
             JSONArray array = new JSONArray(p);
             JSONObject object = array.getJSONObject(0); 
             Person person = new ObjectMapper().readValue(object.toString(), Person.class);
+            commands.jsonSet(key_p , "$.active" , "false");
 
             for (int i = 0 ; i < keys.length ; i ++) {
                 if (keys[i] == "name") {
@@ -202,13 +230,22 @@ public class Controller {
                     person.setDetail(keys[i].toString(), m.get(keys[i]));
                 }
             }
+
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             String time = timestamp.toString();
             person.setUpdatedOn(time);
             person.setUpdatedBy(user);
+            person.setActive(true);
             String p_json = new ObjectMapper().writeValueAsString(person);
-            String updatedPerson = commands.jsonSet(key_p, "$", p_json , SetMode.XX);
+
+            Integer version = (Integer.parseInt(ver) + 1) ;
+            ver = String.valueOf(version);
+            commands.hset(hkey, "v", ver);
+            key_p = "People:" + id + ":" + ver;
+
+            String updatedPerson = commands.jsonSet(key_p, "$", p_json , SetMode.NX);
             System.out.println(updatedPerson);
+
             return "updated";
         } catch (Exception e) {
             System.out.println(e);
