@@ -10,7 +10,6 @@ import lombok.NonNull;
 
 public class Person {
 
-    @NonNull
     private String id; 
 
     private String name ;

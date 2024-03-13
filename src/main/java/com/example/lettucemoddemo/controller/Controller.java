@@ -56,18 +56,22 @@ public class Controller {
     }
 
     @PostMapping("/new")
-    public String addPerson(@RequestBody Person p) {
+    public String addPerson(@RequestBody Person p, @RequestParam String user) {
         String p_json;
+        if (p.getId() == null) {
+            return "cannot create with id";
+        }
         try {
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             String time = timestamp.toString();
             p.setCreatedOn(time);
+            p.setCreatedBy(user);
             p_json = new ObjectMapper().writeValueAsString(p);
             String pid = p.getId();
             String key_p = "People:" + pid ;
             commands.jsonSet(key_p, "$", p_json , SetMode.NX);
             return p_json;
-        } catch (JsonProcessingException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             return "error";
         }  
@@ -95,8 +99,12 @@ public class Controller {
 
     @DeleteMapping("/deleteById")
     public String deletePersonById(@RequestParam String id) {
+        
         String key_p = "People:" + id ;
-        commands.jsonDel(key_p);
+        Long c = commands.jsonDel(key_p);
+        if (c == 0 ) {
+            return "enter valid id";
+        }
         return "Deleted People : " + id;
     }
 
@@ -125,9 +133,8 @@ public class Controller {
     }
 
     @PutMapping("/updateById")
-    public String updatePersonById(@RequestParam String id , @RequestBody(required = false) Map<String,Object> m) {
+    public String updatePersonById(@RequestParam String id ,@RequestParam String user ,@RequestBody(required = false) Map<String,Object> m) {
         String key_p = "People:" + id ;
-
         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
         String time = timestamp.toString();
         try {
@@ -141,7 +148,7 @@ public class Controller {
         Set<String> p_keys = new LinkedHashSet<String>();   
         p_keys.add("name");
         p_keys.add("age");
-        p_keys.add("updatedBy");
+        //p_keys.add("updatedBy");
         Object[] keys = m.keySet().toArray();
         try {
             for (int i = 0 ; i < keys.length ; i ++) {
@@ -154,14 +161,13 @@ public class Controller {
                 else if (keys[i] == "id") {
                         System.out.println("cannot change key");
                 }
-                else if (keys[i] == "createdBy") {
-                    System.out.println("cannot createdBy");
-            }
                 else {
                         String path = "$.detail." + keys[i];
                         commands.jsonSet(key_p,path ,val);
                 }
                 }
+                String u = new ObjectMapper().writeValueAsString(user);
+                commands.jsonSet(key_p, "$.updatedBy" ,u , SetMode.XX);
                 return "updated";
             } 
         catch (Exception e) {
@@ -170,9 +176,9 @@ public class Controller {
         }
     }
     
-    
+
     @PutMapping("/updateEntireById")
-    public String updatePersonFullById(@RequestParam String id , @RequestBody(required = false) Map<String,Object> m) {
+    public String updatePersonFullById(@RequestParam String id ,@RequestParam String user ,@RequestBody(required = false) Map<String,Object> m) {
         String key_p = "People:" + id ;
         Object[] keys = m.keySet().toArray();
         String p = commands.jsonGet(key_p, "$");
@@ -189,14 +195,8 @@ public class Controller {
                     int a = (Integer) m.get(keys[i]);
                     person.setAge(a);
                 }
-                else if (keys[i] == "updatedBy") {
-                    person.setUpdatedBy(m.get(keys[i]).toString());
-                }
                 else if (keys[i] == "id") {
                     System.out.println("cannot change key");
-                }
-                else if (keys[i] == "createdBy") {
-                    System.out.println("cannot change createdBy");
                 }
                 else {
                     person.setDetail(keys[i].toString(), m.get(keys[i]));
@@ -205,6 +205,7 @@ public class Controller {
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             String time = timestamp.toString();
             person.setUpdatedOn(time);
+            person.setUpdatedBy(user);
             String p_json = new ObjectMapper().writeValueAsString(person);
             String updatedPerson = commands.jsonSet(key_p, "$", p_json , SetMode.XX);
             System.out.println(updatedPerson);
