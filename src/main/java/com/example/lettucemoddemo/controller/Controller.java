@@ -80,8 +80,7 @@ public class Controller {
             return "cannot create with id";
         }
         try {
-            String hkey = "version:People:" + p.getId();
-            commands.hset(hkey, "v", "1");
+            
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             String time = timestamp.toString();
             p.setCreatedOn(time);
@@ -90,7 +89,12 @@ public class Controller {
             p_json = new ObjectMapper().writeValueAsString(p);
             String pid = p.getId();    
             String key_p = "People:" + pid + ":1";
-            commands.jsonSet(key_p, "$", p_json , SetMode.NX);
+            String s = commands.jsonSet(key_p, "$", p_json , SetMode.NX);
+            if (s == null) {
+                return "id already exists";
+            }
+            String hkey = "version:People:" + p.getId();
+            commands.hset(hkey, "v", "1");
             return p_json;
         } catch (Exception e) {
             e.printStackTrace();
