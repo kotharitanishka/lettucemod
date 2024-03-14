@@ -22,12 +22,12 @@ public class Person {
 
     private String updatedOn ;  
 
-    
+    private boolean active;
 
     public Person() {
     }
 
-    public Person(String id, String name, Integer age , String createdBy , String createdOn , String updatedBy , String updatedOn ) {
+    public Person(String id, String name, Integer age , String createdBy , String createdOn , String updatedBy , String updatedOn , boolean active) {
         this.id = id;
         this.name = name;
         this.age = age;
@@ -35,6 +35,7 @@ public class Person {
         this.createdOn = createdOn;
         this.updatedBy = updatedBy;
         this.updatedOn = updatedOn;
+        this.active = active;
         // this.details = details;
     }
 
@@ -101,6 +102,14 @@ public class Person {
 
     public Map<String, Object> getDetail() {
         return detail;
+    }
+
+    public boolean isActive() {
+        return active;
+    }
+
+    public void setActive(boolean active) {
+        this.active = active;
     }
 
     // public JsonNode getDetails() {
