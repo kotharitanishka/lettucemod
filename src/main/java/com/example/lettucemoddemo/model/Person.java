@@ -12,6 +12,8 @@ public class Person {
 
     private Integer age ;
 
+    Map<String, Object> detail = new HashMap<>();
+    
     private String createdBy ; 
 
     private String createdOn ;
@@ -21,8 +23,6 @@ public class Person {
     private String updatedOn ;  
 
     private boolean active;
-
-    Map<String, Object> detail = new HashMap<>();
 
     public Person() {
     }
