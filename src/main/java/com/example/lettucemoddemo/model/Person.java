@@ -1,12 +1,8 @@
 package com.example.lettucemoddemo.model;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
-
-import lombok.NonNull;
 
 public class Person {
 
@@ -16,6 +12,8 @@ public class Person {
 
     private Integer age ;
 
+    Map<String, Object> detail = new HashMap<>();
+    
     private String createdBy ; 
 
     private String createdOn ;
@@ -24,7 +22,7 @@ public class Person {
 
     private String updatedOn ;  
 
-    Map<String, Object> detail = new HashMap<>();
+    
 
     public Person() {
     }

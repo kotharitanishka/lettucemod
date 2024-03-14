@@ -59,7 +59,7 @@ public class Controller {
     public String addPerson(@RequestBody Person p, @RequestParam String user) {
         String p_json;
         if (p.getId() == null) {
-            return "cannot create with id";
+            return "cannot create without id";
         }
         try {
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
@@ -69,7 +69,11 @@ public class Controller {
             p_json = new ObjectMapper().writeValueAsString(p);
             String pid = p.getId();
             String key_p = "People:" + pid ;
-            commands.jsonSet(key_p, "$", p_json , SetMode.NX);
+            String s = commands.jsonSet(key_p, "$", p_json , SetMode.NX);
+            //System.out.println(s);
+            if (s == null) {
+                return "id already exists";
+            }
             return p_json;
         } catch (Exception e) {
             e.printStackTrace();
