@@ -9,7 +9,9 @@ import com.redis.lettucemod.api.sync.RedisModulesCommands;
 import com.redis.lettucemod.json.SetMode;
 import com.redis.lettucemod.search.CreateOptions;
 import com.redis.lettucemod.search.Field;
+import com.redis.lettucemod.search.SearchOptions;
 import com.redis.lettucemod.search.SearchResults;
+import com.redis.lettucemod.search.SearchOptions.SortBy;
 
 import io.lettuce.core.RedisURI;
 
@@ -38,6 +40,16 @@ public class Controller {
     //Obtain the command API for synchronous execution.
     RedisModulesCommands<String, String> commands = connection.sync();
 
+    public String goodAns(SearchResults<String , String> ans) {
+        String ans1 =  (ans.toString().replaceAll(",\s\\$=", " "));
+        //String ans2 = ans1.replaceAll("\\},", ",");
+        //StringBuffer b = new StringBuffer(ans2);
+        //b.deleteCharAt(ans2.length()-2);
+        //System.out.println(b);
+        return ans1;
+
+    }
+    
     @PostMapping("/new")
     public String addPerson(@RequestBody Person p, @RequestParam String user) {
         String p_json;
@@ -49,7 +61,7 @@ public class Controller {
                                                      .on(CreateOptions.DataType.JSON)
                                                      .prefixes("People:")
                                                      .build();
-            commands.ftCreate("pix", options, Field.text("$.id").as("id").build() ,Field.text("$.name").as("name").build(), Field.numeric("$.age").as("age").build(), Field.tag("$.active").as("active").build());
+            commands.ftCreate("pidx", options, Field.text("$.id").as("id").sortable(true).build() ,Field.text("$.name").as("name").build(), Field.numeric("$.age").as("age").build(), Field.tag("$.active").as("active").build());
             //commands.ftCreate("p", options , Field.text(null).)
         } catch (Exception e) {
             System.out.println("already exists index");
@@ -79,17 +91,49 @@ public class Controller {
 
 
     @GetMapping("/getAll")
-    public String getAllPerson(@RequestParam(required = false) Boolean inact) {
+    public String getAllPerson(@RequestParam(required = false) Boolean inact , @RequestParam(required = false) Integer pg , @RequestParam(required = false) Integer limit ) {
         SearchResults<String,String> ans;
+        Integer offset;
+        limit = (limit == null) ? 2 : limit ;
+        if (pg == null || (pg == 0 || pg == 1)) {
+            offset = 0;
+        }
+        else {
+            offset = (pg-1)*limit ;
+        }
+        // for limit 3
+        // pg    offset  nums    
+        // 0,1    0       1 2 3
+        // 2      3       4 5 6 
+        //3       6       7 8 9 
+        //4       9
+        //5       8
+        //6      10
+
+        // for limit 2
+        // pg    offset  nums    
+        // 0,1    0       1 2 
+        // 2      2       3 4 
+        //3       4       5 6 
+        //4       6
+        //5       8
+        //6      10
+        SearchOptions <String , String> options = SearchOptions.<String , String>builder()
+                                                  .limit(offset, limit)
+                                                  .sortBy(SortBy.asc("id"))
+                                                  .build();
+
         if (inact == null || inact == false )  {
-            ans = commands.ftSearch("pidx", "@active:{true}");
+            //ans = commands.ftSearch("pidx", "@active:{true}");
+            ans = commands.ftSearch("pidx", "@active:{true}", options);
         } else {
-            ans = commands.ftSearch("pidx", "*");
+            ans = commands.ftSearch("pidx", "*" , options);
         }
         if (ans.isEmpty() == true) {
             return "empty";
         } else {
-            return ans.toString();
+            return goodAns(ans);
+            //return ans.toString();
         } 
     }
 
@@ -114,7 +158,8 @@ public class Controller {
                     }
                     else {
                         String q = "@id:" + id ;
-                        return commands.ftSearch("pix", q).toString();
+                        SearchResults<String,String> ans = commands.ftSearch("pix", q);
+                        return goodAns(ans);
                     }
                 } 
                 else {
@@ -141,14 +186,17 @@ public class Controller {
         else {
             q = "@name:" + n ;
         }
-        SearchResults<String , String> s = commands.ftSearch("pidx", q);
+        SearchOptions <String , String> options = SearchOptions.<String , String>builder()
+                                                  .sortBy(SortBy.asc("id"))
+                                                  .build();
+        SearchResults<String , String> s = commands.ftSearch("pidx", q , options);
         System.out.println(n);
         System.out.println(s);
         if (s.isEmpty() == true) {
             return "name not found";
         }
         else{
-            return s.toString();
+            return goodAns(s);
         } 
     }
 
@@ -160,10 +208,14 @@ public class Controller {
         String key_p = "People:" + id + ":" + ver;
         Object[] keys = m.keySet().toArray();
         String p = commands.jsonGet(key_p, "$");
+        
         try {
             JSONArray array = new JSONArray(p);
             JSONObject object = array.getJSONObject(0); 
             Person person = new ObjectMapper().readValue(object.toString(), Person.class);
+            if (person.isActive() == false) {
+                return "user deleted , cannot update";
+            }
             commands.jsonSet(key_p , "$.active" , "false");
 
             for (int i = 0 ; i < keys.length ; i ++) {
