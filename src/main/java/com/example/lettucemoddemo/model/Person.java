@@ -3,7 +3,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonAnySetter;
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
+@JsonPropertyOrder({"id" , "name" , "age" , "detail" , "createdBy" , "createdOn" , "updatedBy" , "updatedOn" , "active"})
 public class Person {
 
     private String id; 
