@@ -61,6 +61,7 @@ public class Controller {
                                                      .on(CreateOptions.DataType.JSON)
                                                      .prefixes("People:")
                                                      .build();
+                                                    
             commands.ftCreate("pidx", options, Field.text("$.id").as("id").sortable(true).build() ,Field.text("$.name").as("name").build(), Field.numeric("$.age").as("age").build(), Field.tag("$.active").as("active").build());
             //commands.ftCreate("p", options , Field.text(null).)
         } catch (Exception e) {
@@ -107,17 +108,7 @@ public class Controller {
         // 2      3       4 5 6 
         //3       6       7 8 9 
         //4       9
-        //5       8
-        //6      10
-
-        // for limit 2
-        // pg    offset  nums    
-        // 0,1    0       1 2 
-        // 2      2       3 4 
-        //3       4       5 6 
-        //4       6
-        //5       8
-        //6      10
+    
         SearchOptions <String , String> options = SearchOptions.<String , String>builder()
                                                   .limit(offset, limit)
                                                   .sortBy(SortBy.asc("id"))
