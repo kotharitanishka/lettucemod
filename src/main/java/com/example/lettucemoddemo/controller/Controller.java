@@ -3,8 +3,13 @@ package com.example.lettucemoddemo.controller;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.lettucemoddemo.model.Person;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.lettucemod.RedisModulesClient;
 import com.redis.lettucemod.api.StatefulRedisModulesConnection;
 import com.redis.lettucemod.api.sync.RedisModulesCommands;
@@ -20,11 +25,13 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import java.sql.Timestamp;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Map.Entry;
 
 import org.springframework.boot.configurationprocessor.json.JSONArray;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
@@ -50,10 +57,11 @@ public class Controller {
     public Map<String, Object> jsonResponse(SearchResults<String, String> ans) {
 
         Map<String, Object> m1 = new LinkedHashMap<String, Object>();
+        System.out.println(ans.get(0).getId().split(":")[1]);
         Integer c = ans.size();
         for (Integer i = 0; i < c; i++) {
             String k1 = (ans.get(i).getId().split(":")[1]);
-            String k = "id:" + k1;
+            String k = k1;
             Object v = (ans.toArray()[i]);
             m1.put(k, v);
         }
@@ -155,42 +163,110 @@ public class Controller {
     }
 
     @GetMapping("/getById")
-    public Map<String, Object> getPersonById(@RequestParam String id, @RequestParam(required = false) Boolean inact) {
-        String hkey = "version:People:" + id;
-        String ver = commands.hget(hkey, "v");
-        String key_p = "People:" + id + ":" + ver;
+    public Map<String, Object> getPersonById(@RequestParam String id, @RequestParam(required = false) Boolean inact , @RequestParam(required = false) Integer min , @RequestParam(required = false) Integer max) {
+                
+        
+        String key_p = "People:" + id + ":0";
         String person = commands.jsonGet(key_p, "$");
         Map<String, Object> map = new LinkedHashMap<String, Object>();
+        Map<String, Object> versions = new LinkedHashMap<String, Object>();
 
         if (person == null) {
             map.put("message", "Person not found");
-            map.put("data", List.of());
+            map.put("base", List.of());
+            map.put("history", List.of());
             return map;
-            // return "id not found";
-        } else {
+
+        } 
+        
+        else{
             try {
                 JSONArray array = new JSONArray(person);
                 JSONObject object = array.getJSONObject(0);
                 Person p = new ObjectMapper().readValue(object.toString(), Person.class);
                 if (p.isActive()) {
-                    if (inact == null || inact == false) {
-                        map.put("message", "Person found");
-                        map.put("data", p);
-                        // System.out.println(person);
-                        return map;
-                        // return person ;
 
-                    } else {
-                        String q = "@id:" + id;
-                        SearchResults<String, String> ans = commands.ftSearch("pidx", q);
-                        map.put("message", "Person found");
-                        map.put("data", jsonResponse(ans));
-                        return map;
-                        // return goodAns(ans);
+                    //case 1 : min and max both are not given
+                    if (min == null && max == null) {
+                        map.put("base", p);
+                        map.put("history", List.of());
                     }
+
+                    //case 2 : min = 1
+                    else if (min == 1) {
+                        if (max == null) {
+                            String hkey = "version:People:" + id;
+                            String ver = commands.hget(hkey, "v");
+                            max = Integer.parseInt(ver);
+                            System.out.println("max = " + max);
+                        }
+                        //for min
+                        String key_min = "People:" + id + ":1" ;
+                        String person_min = commands.jsonGet(key_min, "$");
+                        JSONArray pmin_arr = new JSONArray(person_min);
+                        JSONObject pmin_obj = pmin_arr.getJSONObject(0);
+                        Person pmin = new ObjectMapper().readValue(pmin_obj.toString(), Person.class);
+                        map.put("base",pmin);
+
+                        //for max
+                        String key_v ;
+                        String delta_v ;                         
+                        ArrayNode delta_node ;
+                        for (Integer i = min+1 ; i <= max ; i ++){
+                            key_v = "People:" + id + ":" + i.toString();
+                            delta_v = commands.jsonGet(key_v, "$");
+                            delta_node = (ArrayNode) new ObjectMapper().readTree(delta_v);                                                 
+                            versions.put(i.toString(), delta_node.get(0));
+                        }
+                        map.put("history", versions);
+                    }
+
+                    //case 3 : min not 1
+                    else {
+                        if (max == null) {
+                            String hkey = "version:People:" + id;
+                            String ver = commands.hget(hkey, "v");
+                            max = Integer.parseInt(ver);
+                            System.out.println("max = " + max);
+                        }
+                        //for min
+                        String key_min = "People:" + id + ":1" ;
+                        String person_min = commands.jsonGet(key_min, "$");
+                        JSONArray pmin_arr = new JSONArray(person_min);
+                        JSONObject pmin_obj = pmin_arr.getJSONObject(0);
+                        Person pmin = new ObjectMapper().readValue(pmin_obj.toString(), Person.class);
+                        String key_min_v ;
+                        String delta_min_v ;
+                        ArrayNode delta_node_min_v ; 
+                        
+                        
+                        for (Integer k = 2 ; k <= min ; k ++){
+                            key_min_v = "People:" + id + ":" + k.toString();
+                            delta_min_v = commands.jsonGet(key_min_v, "$");
+                            delta_node_min_v = (ArrayNode) new ObjectMapper().readTree(delta_min_v);
+                            pmin = updateDelta(pmin , delta_node_min_v.get(0));
+                        }
+                        map.put("base",pmin);
+
+                        //for max
+                        String key_v ;
+                        String delta_v ;                         
+                        ArrayNode delta_node ;
+                        for (Integer i = min+1 ; i <= max ; i ++){
+                            key_v = "People:" + id + ":" + i.toString();
+                            delta_v = commands.jsonGet(key_v, "$");
+                            delta_node = (ArrayNode) new ObjectMapper().readTree(delta_v);                                                 
+                            versions.put(i.toString(), delta_node.get(0));
+                        }
+                        map.put("history", versions);
+                    }
+                    
+                    return map;
+                    
                 } else {
                     map.put("message", "Person not found");
-                    map.put("data", List.of());
+                    map.put("base", List.of());
+                    map.put("history", List.of());
                     return map;
                     // return "id not found";
                 }
@@ -257,22 +333,27 @@ public class Controller {
                     commands.jsonSet(key_p0, path, val, SetMode.XX);
                 } else if (keys[i] == "id") {
                     System.out.println("cannot change key");
-                } else {
-                    String path = "$.detail." + keys[i];
-                    commands.jsonSet(key_p0, path, val);
+                }
+                else {
+                    m.remove(keys[i]);
                 }
             }
 
+            if (m.isEmpty() == true) {
+                return "enter something valid to update";
+            }
+            Map<String, Object> delta = new LinkedHashMap<String, Object>();
+            delta.put("data", m);
             String u = new ObjectMapper().writeValueAsString(user);
             commands.jsonSet(key_p0, "$.updatedBy", u, SetMode.XX);
-            m.put("updatedBy", user);
+            delta.put("updatedBy", user);
 
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             String time = timestamp.toString();
             try {
                 String t = new ObjectMapper().writeValueAsString(time);
                 commands.jsonSet(key_p0, "$.updatedOn", t, SetMode.XX);
-                m.put("updatedOn", t);
+                delta.put("updatedOn", time);
             } catch (JsonProcessingException e) {
                 e.printStackTrace();
                 System.out.println(e);
@@ -285,7 +366,7 @@ public class Controller {
             commands.hset(hkey, "v", ver);
             String key_p = "People:" + id + ":" + ver;
 
-            String value = new ObjectMapper().writeValueAsString(m);
+            String value = new ObjectMapper().writeValueAsString(delta);
             commands.jsonSet(key_p, "$", value, SetMode.NX);
 
             return "updated";
@@ -295,58 +376,37 @@ public class Controller {
         }
     }
 
-    // @PutMapping("/updateEntireById")
-    // public String updatePersonFullById(@RequestParam String id, @RequestParam String user,
-    //         @RequestBody(required = false) Map<String, Object> m) {
-    //     String hkey = "version:People:" + id;
-    //     String ver = commands.hget(hkey, "v");
-    //     String key_p = "People:" + id + ":" + ver;
-    //     Object[] keys = m.keySet().toArray();
-    //     String p = commands.jsonGet(key_p, "$");
 
-    //     try {
-    //         JSONArray array = new JSONArray(p);
-    //         JSONObject object = array.getJSONObject(0);
-    //         Person person = new ObjectMapper().readValue(object.toString(), Person.class);
-    //         if (person.isActive() == false) {
-    //             return "user deleted , cannot update";
-    //         }
-    //         commands.jsonSet(key_p, "$.active", "false");
+    
+    public Person updateDelta(Person p , JsonNode d ) {
 
-    //         for (int i = 0; i < keys.length; i++) {
-    //             if (keys[i] == "name") {
-    //                 person.setName(m.get(keys[i]).toString());
-    //             } else if (keys[i] == "age") {
-    //                 int a = (Integer) m.get(keys[i]);
-    //                 person.setAge(a);
-    //             } else if (keys[i] == "id") {
-    //                 System.out.println("cannot change key");
-    //             } else {
-    //                 person.setDetail(keys[i].toString(), m.get(keys[i]));
-    //             }
-    //         }
+        JsonNode data = d.get("data");
 
-    //         Timestamp timestamp = new Timestamp(System.currentTimeMillis());
-    //         String time = timestamp.toString();
-    //         person.setUpdatedOn(time);
-    //         person.setUpdatedBy(user);
-    //         person.setActive(true);
-    //         String p_json = new ObjectMapper().writeValueAsString(person);
+        if (data.has("name") ) {
+            p.setName(data.get("name").asText());
+        }
+        if (data.has("age")) {
+            Integer a = (Integer) data.get("age").asInt();
+            p.setAge(a);
+        }
+        if (d.has("updatedBy")) {
+            p.setUpdatedBy(d.get("updatedBy").asText());
+        }
+        if (d.has("updatedOn")) {
+            p.setUpdatedOn(d.get("updatedOn").asText());
+        }
+        if (data.has("detail")){
 
-    //         Integer version = (Integer.parseInt(ver) + 1);
-    //         ver = String.valueOf(version);
-    //         commands.hset(hkey, "v", ver);
-    //         key_p = "People:" + id + ":" + ver;
-
-    //         String updatedPerson = commands.jsonSet(key_p, "$", p_json, SetMode.NX);
-    //         System.out.println(updatedPerson);
-
-    //         return "updated";
-    //     } catch (Exception e) {
-    //         System.out.println(e);
-    //         return "error , did not update";
-    //     }
-    // }
+            Iterator<Entry<String, JsonNode>> i = data.get("detail").fields();
+            while (i.hasNext()){
+                Entry<String, JsonNode> iter = i.next();
+                p.setDetail(iter.getKey(), iter.getValue());
+            }
+        }
+            
+        return p;
+        
+    }
 
     @DeleteMapping("/deleteById")
     public String deletePersonById(@RequestParam String id) {

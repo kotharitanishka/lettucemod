@@ -114,6 +114,7 @@ public class Person {
         this.active = active;
     }
 
+
     // public JsonNode getDetails() {
     //     return details;
     // }
