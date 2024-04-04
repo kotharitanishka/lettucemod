@@ -17,13 +17,17 @@ import com.redis.lettucemod.api.sync.RedisModulesCommands;
 import com.redis.lettucemod.json.SetMode;
 import com.redis.lettucemod.search.CreateOptions;
 import com.redis.lettucemod.search.Field;
+//import com.redis.lettucemod.search.Field;
 import com.redis.lettucemod.search.SearchOptions;
 import com.redis.lettucemod.search.SearchResults;
 import com.redis.lettucemod.search.SearchOptions.SortBy;
 
 import io.lettuce.core.RedisURI;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 
+//import java.lang.reflect.Field;
+//import java.lang.reflect.Field;
 import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -37,6 +41,10 @@ import java.util.Map.Entry;
 import org.springframework.boot.configurationprocessor.json.JSONArray;
 import org.springframework.boot.configurationprocessor.json.JSONException;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -59,26 +67,45 @@ public class Controller {
     public Map<String, Object> jsonResponse(SearchResults<String, String> ans) {
 
         Map<String, Object> m1 = new LinkedHashMap<String, Object>();
-        //System.out.println(ans.get(0).getId().split(":")[1]);
+        // System.out.println(ans.get(0).getId().split(":")[1]);
         Integer c = ans.size();
         for (Integer i = 0; i < c; i++) {
             String k1 = (ans.get(i).getId().split(":")[1]);
             String k = k1;
             Object v = (ans.toArray()[i]);
             m1.put(k, v);
+            // System.out.println(m1);
         }
         return m1;
 
     }
 
     @PostMapping("/new")
-    public String addPerson(@RequestBody Person p, @RequestParam(required = false) String user) {
+    public ResponseEntity<Map<String, Object>> addPerson(@RequestBody @Valid Person p,
+            @RequestParam(required = false) String user) {
         String p_json;
-        if (p.getId() == null) {
-            return "cannot create without id";
+        // System.out.println("\n\ntest\n");
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        ResponseEntity<Map<String, Object>> result;
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+
+        if (user == null || user.isEmpty()) {
+            System.out.println("\n\n\nuser is null\n\n\n");
+            map.put("error", "ERROR : enter audit field user ");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+            // return new ResponseEntity<String>("ERROR : enter audit field user ",
+            // HttpStatus.BAD_REQUEST);
         }
-        if (user == null) {
-            return "ERROR : enter audit field user ";
+        if (p.getId() == null) {
+            // return new ResponseEntity<String>("cannot create without id",
+            // HttpStatus.BAD_REQUEST);
+            map.put("error", "cannot create without id");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
         }
         try {
             CreateOptions<String, String> options = CreateOptions.<String, String>builder()
@@ -88,7 +115,7 @@ public class Controller {
 
             commands.ftCreate("pidx", options, Field.text("$.id").as("id").sortable(true).build(),
                     Field.text("$.name").as("name").build(), Field.numeric("$.age").as("age").build(),
-                    Field.tag("$.active").as("active").build());
+                    Field.tag("$.active0").as("active0").build());
         } catch (Exception e) {
             System.out.println("already exists index");
         }
@@ -96,36 +123,50 @@ public class Controller {
 
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             String time = timestamp.toString();
-            p.setCreatedOn(time);
-            p.setCreatedBy(user);
-            p.setActive(false);
+            p.setcreatedOn0(time);
+            p.setcreatedBy0(user);
+            p.setactive0(false);
             p_json = new ObjectMapper().writeValueAsString(p);
             String pid = p.getId();
             String key_p0 = "People:" + pid + ":0";
             String key_p1 = "People:" + pid + ":1";
             String s1 = commands.jsonSet(key_p1, "$", p_json, SetMode.NX);
-            p.setActive(true);
+            p.setactive0(true);
             p_json = new ObjectMapper().writeValueAsString(p);
             commands.jsonSet(key_p0, "$", p_json, SetMode.NX);
             if (s1 == null) {
-                return "id already exists";
+                map.put("error", "id already exists");
+                map.put("code", HttpStatus.BAD_REQUEST);
+                result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+                return result;
+                // return new ResponseEntity<String>("id already exists",
+                // HttpStatus.INTERNAL_SERVER_ERROR);
             }
             String hkey = "version:People:" + p.getId();
             commands.hset(hkey, "v", "1");
 
-            return p_json;
+            map.put("success", "created new person " + p.getId());
+            map.put("code", HttpStatus.OK);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+            return result;
+
+            // return new ResponseEntity<String>(p_json, HttpStatus.OK);
         } catch (Exception e) {
             e.printStackTrace();
-            return "error";
+            map.put("error", "ERROR  ");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+            // return new ResponseEntity<String>("error", HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
     @GetMapping("/getAll")
-    public Map<String, Object> getAllPerson(@RequestParam(required = false) Boolean inact,
+    public ResponseEntity<Map<String, Object>> getAllPerson(@RequestParam(required = false) Boolean inact,
             @RequestParam(required = false) Integer offset, @RequestParam(required = false) Integer limit,
             HttpServletResponse resp) {
         SearchResults<String, String> ans;
-        limit = (limit == null) ? 10 : limit;
+        limit = (limit == null) ? 5 : limit;
         if (offset == null) {
             offset = 0;
         }
@@ -133,23 +174,32 @@ public class Controller {
         // offset = offset - 1
         // if null then set to 1
 
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        ResponseEntity<Map<String, Object>> result;
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+
         SearchOptions<String, String> options = SearchOptions.<String, String>builder()
                 .limit(offset, limit)
                 .returnFields("name")
                 .sortBy(SortBy.asc("id"))
                 .build();
-                //Integer.parseInt(id)
+        // Integer.parseInt(id)
 
         if (inact == null || inact == false) {
-            ans = commands.ftSearch("pidx", "@active:{true}", options);
+            ans = commands.ftSearch("pidx", "@active0:{true}", options);
+            // System.out.println(ans);
         } else {
             ans = commands.ftSearch("pidx", "*", options);
         }
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        // Map<String, Object> map = new LinkedHashMap<String, Object>();
 
         if (ans.isEmpty() == true) {
-            map.put("data", List.of());
-            return map;
+            map.put("error", "ERROR");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+            // map.put("data", List.of());
+            // return map;
         } else {
 
             Long tc = ans.getCount();
@@ -157,9 +207,22 @@ public class Controller {
             resp.setHeader("TotalCount", tcount);
 
             map.put("data", jsonResponse(ans));
-            Integer t = offset + limit;
-            map.put("next ", t);
-            return map;
+            ;
+            Integer t;
+            if (limit >= tc) {
+                t = -1;
+            } else {
+                t = offset + limit;
+            }
+            Integer lp = (int) Math.ceil(Math.abs((double) tc / limit));
+
+            map.put("nextOffset", t);
+            map.put("lastPage", lp);
+            map.put("success", "true");
+            map.put("code", HttpStatus.OK);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+            return result;
+            // return map;
         }
     }
 
@@ -181,30 +244,39 @@ public class Controller {
     }
 
     @GetMapping("/getById")
-    public Map<String, Object> getPersonById(@RequestParam String id, @RequestParam(required = false) Boolean inact,
+    public ResponseEntity<Map<String, Object>> getPersonById(@RequestParam String id,
             @RequestParam(required = false) Integer min, @RequestParam(required = false) Integer max) {
 
         String key_p = "People:" + id + ":0";
         Person p0 = keyToPerson(key_p);
         Map<String, Object> map = new LinkedHashMap<String, Object>();
         Map<String, Object> versions = new LinkedHashMap<String, Object>();
+        ResponseEntity<Map<String, Object>> result;
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
 
+        // Person p0 = keyToPerson(key_p);
         if (p0 == null) {
-            map.put("base", versions);
-            map.put("history", versions);
-            return map;
+            map.put("error", "ERROR");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+            // return map;
         }
 
         else {
             try {
-                if (p0.isActive()) {
+                if (p0.isactive0()) {
 
                     // case 1 : min and max both are not given
                     if (min == null) {
                         if (max == null) {
                             map.put("base", p0);
                             map.put("history", versions);
-                            return map;
+                            map.put("sucess", "true");
+                            map.put("code", HttpStatus.OK);
+                            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+                            return result;
+                            // return map;
                         } else {
                             min = 1;
                         }
@@ -247,40 +319,54 @@ public class Controller {
                         versions.put(i.toString(), delta_node.get(0));
                     }
                     map.put("history", versions);
+                    map.put("success", "true");
+                    map.put("code", HttpStatus.OK);
+                    result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+                    return result;
 
-                    return map;
+                    // return map;
 
                 } else {
-                    map.put("base", versions);
-                    map.put("history", versions);
-                    return map;
+                    map.put("error", "ERROR");
+                    map.put("code", HttpStatus.BAD_REQUEST);
+                    result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+                    return result;
+                    // return map;
                 }
 
             } catch (Exception e) {
                 System.out.println(e);
-                return map;
+                map.put("error", "ERROR");
+                map.put("code", HttpStatus.BAD_REQUEST);
+                result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+                return result;
+                // return map;
             }
         }
 
     }
 
     @GetMapping("/getByName")
-    public Map<String, Object> getPersonByName(@RequestParam String n, @RequestParam(required = false) Boolean inact) {
+    public ResponseEntity<Map<String, Object>> getPersonByName(@RequestParam String n) {
 
         String q;
-        if (inact == null || inact == false) {
-            q = "(@name:" + n + " & @active:{true})";
-        } else {
-            q = "@name:" + n;
-        }
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        // Map<String, Object> versions = new LinkedHashMap<String, Object>();
+        ResponseEntity<Map<String, Object>> result;
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+        q = "(@name:" + n + " & @active0:{true})";
         SearchOptions<String, String> options = SearchOptions.<String, String>builder()
                 .sortBy(SortBy.asc("id"))
                 .build();
         SearchResults<String, String> s = commands.ftSearch("pidx", q, options);
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        // Map<String, Object> map = new LinkedHashMap<String, Object>();
         if (s.isEmpty() == true) {
             map.put("data", List.of());
-            return map;
+            map.put("error", "ERROR");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+            // return map;
         } else {
 
             Object[] ob = new Object[s.size()];
@@ -301,50 +387,106 @@ public class Controller {
 
             }
             map.put("data", plist);
-            return map;
+            map.put("success", "true");
+            map.put("code", HttpStatus.OK);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+            return result;
+
+            // return map;
         }
     }
 
     @PutMapping("/updateById")
-    public String updatePersonById(@RequestParam String id, @RequestParam String user,
+    public ResponseEntity<Map<String, Object>> updatePersonById(@RequestParam String id, @RequestParam String user,
             @RequestBody(required = false) Map<String, Object> m) {
 
         String key_p0 = "People:" + id + ":0";
+        Person p0 = keyToPerson(key_p0);
+        // System.out.println(p0.getClass().getDeclaredFields());
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        ResponseEntity<Map<String, Object>> result;
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
 
+        if (p0 == null || p0.isactive0() == false) {
+            map.put("error", "enter relevant id");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            // return null;
+            // return new ResponseEntity<String>("enter relevant id",
+            // HttpStatus.NO_CONTENT);
+            // ResponseEntity<Map<String, Object>> n = new
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return (result);
+            // return null ;
+            // new result.status(HttpStatus.NOT_FOUND).body(map);
+            // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
+            // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
+            // return map;
+        }
+        java.lang.reflect.Field f[] = p0.getClass().getDeclaredFields();
         Set<String> p_keys = new LinkedHashSet<String>();
-        p_keys.add("name");
-        p_keys.add("age");
-        p_keys.add("detail");
+        for (int fi = 0; fi < f.length; fi++) {
+            // System.out.println(f[fi].getName());
+            String fkey = f[fi].getName();
+            p_keys.add(fkey);
+        }
+
+        if (m == null || m.isEmpty() == true) {
+            map.put("error", "enter relevant data to update");
+            map.put("code", HttpStatus.NO_CONTENT);
+            // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+        }
         Object[] keys = m.keySet().toArray();
         try {
             for (int i = 0; i < keys.length; i++) {
                 String val = new ObjectMapper().writeValueAsString(m.get(keys[i]));
-                System.out.println(val);
+
+                String path;
                 if (p_keys.contains(keys[i])) {
-                    String path = "$." + keys[i];
-                    commands.jsonSet(key_p0, path, val, SetMode.XX);
-                } else if (keys[i] == "id") {
-                    System.out.println("cannot change key");
+                    if (keys[i] == "id") {
+                        System.out.println("cannot change key");
+                    } else if (keys[i] == "detail") {
+                        // System.out.println();
+                        Object[] ob = m.values().toArray();
+                        // System.out.println(ob[i]);
+                        String d[] = ob[i].toString().replace("{", "").replace("}", "").replace(" ", "").split(",");
+                        // System.out.println(keys[i]);
+                        for (int k = 0; k < d.length; k++) {
+                            // System.out.println(d[k].split("=")[0]);
+                            String d_key = d[k].split("=")[0];
+                            String d_val = d[k].split("=")[1];
+                            // System.out.println(d_val);
+                            path = "$.detail" + "." + d_key;
+                            // System.out.println(path);
+                            String u = new ObjectMapper().writeValueAsString(d_val);
+                            String ans1 = commands.jsonSet(key_p0, path, u, SetMode.XX);
+                            if (ans1 == null) {
+                                commands.jsonSet(key_p0, path, u, SetMode.NX);
+                            }
+                        }
+                    } else {
+                        path = "$." + keys[i];
+                        commands.jsonSet(key_p0, path, val, SetMode.XX);
+
+                    }
                 } else {
                     m.remove(keys[i]);
                 }
             }
 
-            if (m.isEmpty() == true) {
-                return "enter something valid to update";
-            }
             Map<String, Object> delta = new LinkedHashMap<String, Object>();
             delta.put("data", m);
             String u = new ObjectMapper().writeValueAsString(user);
-            commands.jsonSet(key_p0, "$.updatedBy", u, SetMode.XX);
-            delta.put("updatedBy", user);
+            commands.jsonSet(key_p0, "$.updatedBy0", u, SetMode.XX);
+            delta.put("updatedBy0", user);
 
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             String time = timestamp.toString();
             try {
                 String t = new ObjectMapper().writeValueAsString(time);
-                commands.jsonSet(key_p0, "$.updatedOn", t, SetMode.XX);
-                delta.put("updatedOn", time);
+                commands.jsonSet(key_p0, "$.updatedOn0", t, SetMode.XX);
+                delta.put("updatedOn0", time);
             } catch (JsonProcessingException e) {
                 e.printStackTrace();
                 System.out.println(e);
@@ -360,10 +502,23 @@ public class Controller {
             String value = new ObjectMapper().writeValueAsString(delta);
             commands.jsonSet(key_p, "$", value, SetMode.NX);
 
-            return "updated";
+            map.put("success", "updated");
+            map.put("code", HttpStatus.OK);
+            // ResponseEntity.status(HttpStatus.OK).body(map);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+            return result;
+            // return result;
+            // return new ResponseEntity<String>("updated", HttpStatus.OK);
         } catch (Exception e) {
             System.out.println(e);
-            return "error , did not update";
+            map.put("error", "error");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+            // return result;
+            // return new ResponseEntity<String>("error , did not update",
+            // HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -378,11 +533,17 @@ public class Controller {
             Integer a = (Integer) data.get("age").asInt();
             p.setAge(a);
         }
-        if (d.has("updatedBy")) {
-            p.setUpdatedBy(d.get("updatedBy").asText());
+        if (data.has("mobNo")) {
+            p.setMobNo((data.get("mobNo").asText()));
         }
-        if (d.has("updatedOn")) {
-            p.setUpdatedOn(d.get("updatedOn").asText());
+        if (data.has("dob")) {
+            p.setDob((data.get("dob").asText()));
+        }
+        if (d.has("updatedBy0")) {
+            p.setupdatedBy0(d.get("updatedBy0").asText());
+        }
+        if (d.has("updatedOn0")) {
+            p.setupdatedOn0(d.get("updatedOn0").asText());
         }
         if (data.has("detail")) {
 
@@ -398,16 +559,78 @@ public class Controller {
     }
 
     @DeleteMapping("/deleteById")
-    public String deletePersonById(@RequestParam String id) {
+    public ResponseEntity<Map<String, Object>> deletePersonById(@RequestParam String id, @RequestParam String user) {
 
         String hkey = "version:People:" + id;
         String ver = commands.hget(hkey, "v");
+        Map<String, Object> delta = new LinkedHashMap<String, Object>();
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        ResponseEntity<Map<String, Object>> result;
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+        // ResponseEntity<Object> result = new ResponseEntity<Object>();
         if (ver == null) {
-            return "enter valid id";
+            map.put("error", "enter valid id");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+            // return new ResponseEntity<String>("enter relevant id",
+            // HttpStatus.NO_CONTENT);
         }
-        String key_p = "People:" + id + ":0";
-        commands.jsonSet(key_p, "$.active", "false");
-        return "Deleted People : " + id;
+        try {
+
+            String key_p0 = "People:" + id + ":0";
+            Person p0 = keyToPerson(key_p0);
+            if (p0 == null || p0.isactive0() == false) {
+                // map.put("base", versions);
+                // map.put("history", versions);
+                // return map;
+                map.put("error", "enter valid id");
+                map.put("code", HttpStatus.BAD_REQUEST);
+                result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+                return result;
+                // return new ResponseEntity<String>("enter relevant id",
+                // HttpStatus.NO_CONTENT);
+            }
+            String u;
+            u = new ObjectMapper().writeValueAsString(user);
+
+            commands.jsonSet(key_p0, "$.updatedBy0", u, SetMode.XX);
+            delta.put("updatedBy0", user);
+
+            Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+            String time = timestamp.toString();
+            String t = new ObjectMapper().writeValueAsString(time);
+            commands.jsonSet(key_p0, "$.updatedOn0", t, SetMode.XX);
+            delta.put("updatedOn0", time);
+
+            commands.jsonSet(key_p0, "$.active0", "false");
+            delta.put("active0", false);
+
+            Integer version = (Integer.parseInt(ver) + 1);
+            ver = String.valueOf(version);
+            commands.hset(hkey, "v", ver);
+            String key_p = "People:" + id + ":" + ver;
+
+            String value;
+
+            value = new ObjectMapper().writeValueAsString(delta);
+
+            commands.jsonSet(key_p, "$", value, SetMode.NX);
+
+            // return new ResponseEntity<String>("Deleted People : " + id, HttpStatus.OK);
+            map.put("success", "Deleted People :" + id);
+            map.put("code", HttpStatus.OK);
+            // ResponseEntity.status(HttpStatus.OK).body(map);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+            return result;
+        } catch (Exception e) {
+            map.put("error", "enter valid id");
+            map.put("code", HttpStatus.BAD_REQUEST);
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+            // return new ResponseEntity<String>("error", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
     }
 
 }
