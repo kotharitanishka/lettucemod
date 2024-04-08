@@ -71,8 +71,6 @@ public class Controller {
 
     RedisModulesCommands<String, String> commands;
 
-
-
     public Map<String, Object> jsonResponse(SearchResults<String, String> ans) {
 
         Map<String, Object> m1 = new LinkedHashMap<String, Object>();
@@ -90,6 +88,11 @@ public class Controller {
         return m1;
 
     }
+
+    public CreateOptions<String, String> options0 = CreateOptions.<String, String>builder()
+            .on(CreateOptions.DataType.JSON)
+            .prefixes("People:")
+            .build();
 
     @PostMapping("/new")
     public ResponseEntity<Map<String, Object>> addPerson(@RequestBody @Valid Person p,
@@ -123,15 +126,12 @@ public class Controller {
             return result;
         }
         try {
-            CreateOptions<String, String> options = CreateOptions.<String, String>builder()
-                    .on(CreateOptions.DataType.JSON)
-                    .prefixes("People:")
-                    .build();
 
-            commands.ftCreate("pidx", options, Field.text("$.id").as("id").sortable(true).build(),
+            commands.ftCreate("pidx", options0, Field.text("$.id").as("id").sortable(true).build(),
                     Field.text("$.name").as("name").build(), Field.numeric("$.age").as("age").build(),
                     Field.tag("$.active0").as("active0").build());
         } catch (Exception e) {
+            System.out.println(e.getClass().getName());
             System.out.println("already exists index");
         }
         try {
@@ -170,8 +170,9 @@ public class Controller {
             // return new ResponseEntity<String>(p_json, HttpStatus.OK);
         } catch (Exception e) {
             e.printStackTrace();
-            map.put("error", "ERROR  ");
-            map.put("code", HttpStatus.BAD_REQUEST);
+            map.put("message", "ERROR");
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
             // return new ResponseEntity<String>("error", HttpStatus.INTERNAL_SERVER_ERROR);
@@ -362,8 +363,9 @@ public class Controller {
 
             } catch (Exception e) {
                 System.out.println(e);
-                map.put("error", "ERROR");
-                map.put("code", HttpStatus.BAD_REQUEST);
+                map.put("message", "ERROR");
+                map.put("error", HttpStatus.BAD_REQUEST.name());
+                map.put("code", HttpStatus.BAD_REQUEST.value());
                 result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
                 return result;
                 // return map;
@@ -408,14 +410,20 @@ public class Controller {
             Person[] plist = new Person[s.size()];
 
             for (int i = 0; i < ob.length; i++) {
-                ob[i] = s.get(i).values().toArray()[1];
-                s0 = ob[i].toString();
                 try {
+                    ob[i] = s.get(i).values().toArray()[1];
+                    s0 = ob[i].toString();
+
                     pi = new ObjectMapper().readValue(s0, Person.class);
                     plist[i] = pi;
                 } catch (Exception e) {
+                    // e.printStackTrace();
                     map.put("data", List.of());
-                    e.printStackTrace();
+                    map.put("error", HttpStatus.BAD_REQUEST.name());
+                    map.put("code", HttpStatus.BAD_REQUEST.value());
+                    result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+                    return result;
+
                 }
 
             }
@@ -512,14 +520,10 @@ public class Controller {
 
             Timestamp timestamp = new Timestamp(System.currentTimeMillis());
             String time = timestamp.toString();
-            try {
-                String t = new ObjectMapper().writeValueAsString(time);
-                commands.jsonSet(key_p0, "$.updatedOn0", t, SetMode.XX);
-                delta.put("updatedOn0", time);
-            } catch (JsonProcessingException e) {
-                e.printStackTrace();
-                System.out.println(e);
-            }
+
+            String t = new ObjectMapper().writeValueAsString(time);
+            commands.jsonSet(key_p0, "$.updatedOn0", t, SetMode.XX);
+            delta.put("updatedOn0", time);
 
             String hkey = "version:People:" + id;
             String ver = commands.hget(hkey, "v");
@@ -541,8 +545,9 @@ public class Controller {
             // return new ResponseEntity<String>("updated", HttpStatus.OK);
         } catch (Exception e) {
             System.out.println(e);
-            map.put("error", "error");
-            map.put("code", HttpStatus.BAD_REQUEST);
+            map.put("message", "error");
+            map.put("error", HttpStatus.BAD_REQUEST.value());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
@@ -653,14 +658,16 @@ public class Controller {
             commands.jsonSet(key_p, "$", value, SetMode.NX);
 
             // return new ResponseEntity<String>("Deleted People : " + id, HttpStatus.OK);
-            map.put("success", "Deleted People :" + id);
-            map.put("code", HttpStatus.OK);
+            map.put("message", "Deleted People :" + id);
+            map.put("success", HttpStatus.OK.name());
+            map.put("code", HttpStatus.OK.value());
             // ResponseEntity.status(HttpStatus.OK).body(map);
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
             return result;
         } catch (Exception e) {
-            map.put("error", "enter valid id");
-            map.put("code", HttpStatus.BAD_REQUEST);
+            map.put("message", "enter valid id");
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
             // return new ResponseEntity<String>("error", HttpStatus.INTERNAL_SERVER_ERROR);

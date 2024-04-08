@@ -39,12 +39,15 @@ import com.redis.lettucemod.api.StatefulRedisModulesConnection;
 import com.redis.lettucemod.api.sync.RedisModulesCommands;
 import com.redis.lettucemod.json.SetMode;
 import com.redis.lettucemod.search.Document;
+import com.redis.lettucemod.search.Field;
 import com.redis.lettucemod.search.SearchOptions;
 import com.redis.lettucemod.search.SearchOptions.SortBy;
 
 import jakarta.servlet.http.HttpServletResponse;
 
 import com.redis.lettucemod.search.SearchResults;
+
+import io.lettuce.core.RedisCommandExecutionException;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.WARN)
@@ -79,22 +82,56 @@ public class junitTest {
 
     when(connection.sync()).thenReturn(commands);
 
-    // case 1 : name does not exist
+    // case 0 : name does not exist --> searchresults null
+    String query0;
+    String name0 = "xyz";
+    query0 = "(@name:" + name0 + " & @active0:{true})";
+    // set up mock behavior
+    when(commands.ftSearch("pidx", query0, controller.options2)).thenReturn(null);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result0 = controller.getPersonByName("xyz");
+    System.out.println(result0);
+    // verify that mock behavior was called
+    verify(commands).ftSearch("pidx", query0, controller.options2);
+    // check result
+    assertEquals(400, result0.getBody().get("code"));
+
+    // case 1 : name does not exist --> searchresults empty
     String query1;
-    String name1 = "xyz";
+    String name1 = "abc";
     query1 = "(@name:" + name1 + " & @active0:{true})";
     SearchResults<String, String> searchResults1 = new SearchResults<>();
     // set up mock behavior
     when(commands.ftSearch("pidx", query1, controller.options2)).thenReturn(searchResults1);
     // call method using mock object
-    ResponseEntity<Map<String, Object>> result1 = controller.getPersonByName("xyz");
+    ResponseEntity<Map<String, Object>> result1 = controller.getPersonByName("abc");
     System.out.println(result1);
     // verify that mock behavior was called
     verify(commands).ftSearch("pidx", query1, controller.options2);
     // check result
     assertEquals(400, result1.getBody().get("code"));
 
-    // case 2 : name exist
+    // case 3 : catch
+    String query3;
+    String name3 = "pqr";
+    query3 = "(@name:" + name3 + " & @active0:{true})";
+    SearchResults<String, String> searchResults3 = new SearchResults<>();
+    Document document3 = new Document<>();
+    document3.put("id", "1000");
+    document3.put("$", "testing");
+
+    searchResults3.add(document3);
+    // set up mock behavior
+    when(commands.ftSearch("pidx", query3, controller.options2)).thenReturn(searchResults3);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result3 = controller.getPersonByName("pqr");
+    System.out.println(result3);
+    // verify that mock behavior was called
+    verify(commands).ftSearch("pidx", query3, controller.options2);
+    // check result
+    assertEquals(400, result1.getBody().get("code"));
+
+    // case 4: name exist
     String query2;
     String name2 = "tk";
     query2 = "(@name:" + name2 + " & @active0:{true})";
@@ -111,8 +148,6 @@ public class junitTest {
 
     searchResults2.add(document1);
     searchResults2.add(document2);
-
-    // System.out.println(searchResults2);
 
     // set up mock behavior
     when(commands.ftSearch("pidx", query2, controller.options2)).thenReturn(searchResults2);
@@ -166,7 +201,39 @@ public class junitTest {
     // check result
     assertEquals("enter valid id", result1.getBody().get("message"));
 
-    // case 2 : id already deleted
+    // case 2 : catch keytoperson
+    String hashKey4 = "version:People:" + "1000";
+    String key4 = "People:1000:0";
+    String jsonPerson4 = new ObjectMapper().writeValueAsString(person1);
+    // set up mock behavior
+    when(commands.hget(hashKey4, "v")).thenReturn("5");
+    when(commands.jsonGet(key4, "$")).thenReturn(jsonPerson4);
+
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result4 = controller.deletePersonById("1000", "user2");
+    System.out.println(result4);
+    // verify that mock behavior was called
+    verify(commands).hget(hashKey4, "v");
+    // check result
+    assertEquals(400, result4.getBody().get("code"));
+
+    // case 4 : catch delete
+    String hashKey5 = "version:People:" + "1000";
+    String key5 = "People:1000:0";
+    String jsonPerson5 = new ObjectMapper().writeValueAsString(personList1);
+    // set up mock behavior
+    when(commands.hget(hashKey5, "v")).thenReturn("abc");
+    when(commands.jsonGet(key5, "$")).thenReturn(jsonPerson5);
+
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result5 = controller.deletePersonById("1000", "user2");
+    System.out.println(result5);
+    // verify that mock behavior was called
+    verify(commands, times(2)).hget(hashKey5, "v");
+    // check result
+    assertEquals(400, result5.getBody().get("code"));
+
+    // case 5 : id already deleted
     String hashKey2 = "version:People:" + "8888";
     String key2 = "People:8888:0";
     String jsonPerson2 = new ObjectMapper().writeValueAsString(personList2);
@@ -181,7 +248,7 @@ public class junitTest {
     // check result
     assertEquals("enter valid id", result2.getBody().get("message"));
 
-    // case 3 : working
+    // case 6 : working
     String hashKey3 = "version:People:" + "1000";
     String key3 = "People:1000:0";
     String jsonPerson3 = new ObjectMapper().writeValueAsString(personList1);
@@ -193,9 +260,9 @@ public class junitTest {
     ResponseEntity<Map<String, Object>> result3 = controller.deletePersonById("1000", "user2");
     System.out.println(result3);
     // verify that mock behavior was called
-    verify(commands).hget(hashKey3, "v");
+    verify(commands, times(3)).hget(hashKey3, "v");
     // check result
-    assertEquals("Deleted People :1000", result3.getBody().get("success"));
+    assertEquals("Deleted People :1000", result3.getBody().get("message"));
   }
 
   @Test
@@ -211,11 +278,23 @@ public class junitTest {
     person3.setName("xyz");
     person3.setAge(27);
 
+    Person person4 = new Person();
+    person4.setId("7000");
+    person4.setName("pqr");
+    person4.setAge(29);
+
     Person person2 = new Person();
     person2.setName("abc");
     person2.setAge(25);
 
     when(connection.sync()).thenReturn(commands);
+
+    // case 0 : audit field user empty
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result0 = controller.addPerson(person2, "");
+    System.out.println(result0);
+    // check result
+    assertEquals("ERROR : enter audit field user", result0.getBody().get("message"));
 
     // case 1 : audit field not given
     // call method using mock object
@@ -230,6 +309,24 @@ public class junitTest {
     System.out.println(result2);
     // check result
     assertEquals("cannot create without id", result2.getBody().get("message"));
+
+    // case 5 :catch ft create
+    String key5 = "People:7000:0";
+    // set up mock behavior
+    when(commands.ftCreate(("pidx"), (controller.options0), Field.text("$.id").as("id").sortable(true).build(),
+        Field.text("$.name").as("name").build(), Field.numeric("$.age").as("age").build(),
+        Field.tag("$.active0").as("active0").build()))
+        .thenThrow(new RedisCommandExecutionException("catch"));
+    when(commands.jsonSet(eq(key5), eq("$"), anyString(), eq(SetMode.NX)))
+        .thenThrow(new RedisCommandExecutionException("catch"));
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result5 = controller.addPerson(person4, "user2");
+    System.out.println(result5);
+    // verify that mock behavior was called
+    // verify(commands).ftCreate(eq("pidx"), eq(controller.options0), any(), any(),
+    // any());
+    // check result
+    assertEquals("ERROR", result5.getBody().get("message"));
 
     // case 3 : id already exists
     String key1 = "People:1000:1";
@@ -290,35 +387,80 @@ public class junitTest {
     person3.setAge(22);
     person3.setactive0(false);
 
+    List<Person> personList2 = new ArrayList<Person>();
+    personList2.add(person3);
+
     when(connection.sync()).thenReturn(commands);
 
-    // case 1 : id does not exist / already deleted
+    // case 1.0 : catch
+    String personKey00 = "People:5000:0";
+    String jsonPerson00 = new ObjectMapper().writeValueAsString(personList2);
+    // set up mock behavior
+    when(commands.jsonGet(personKey00, "$")).thenReturn(jsonPerson00);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result00 = controller.updatePersonById("5000", "user2", null);
+    System.out.println(result00);
+    // verify that mock behavior was called
+    verify(commands).jsonGet(personKey00, "$");
+    // check result
+    assertEquals("enter relevant id",
+        result00.getBody().get("message"));
+
+
+    // case 1 :  already deleted
     String personKey1 = "People:8000:0";
     // set up mock behavior
-    when(commands.jsonGet(personKey1 , "$")).thenReturn(null);
+    when(commands.jsonGet(personKey1, "$")).thenReturn(null);
     // call method using mock object
-    ResponseEntity<Map<String, Object>> result1 =
-    controller.updatePersonById("8000", "user2" , null);
+    ResponseEntity<Map<String, Object>> result1 = controller.updatePersonById("8000", "user2", null);
     System.out.println(result1);
     // verify that mock behavior was called
-    verify(commands).jsonGet(personKey1 , "$");
+    verify(commands).jsonGet(personKey1, "$");
     // check result
     assertEquals("enter relevant id", result1.getBody().get("message"));
 
-    // case 2 : delta null / empty
+    // case 1.0 : catch
+    String personKey0 = "People:5000:0";
+    String jsonPerson0 = new ObjectMapper().writeValueAsString(personList1);
+    map.put("data", "test");
+    // set up mock behavior
+    when(commands.jsonGet(personKey0, "$")).thenReturn(jsonPerson0);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result0 = controller.updatePersonById("5000", "user2", map);
+    System.out.println(result0);
+    // verify that mock behavior was called
+    verify(commands, times(2)).jsonGet(personKey0, "$");
+    // check result
+    assertEquals("error",
+        result0.getBody().get("message"));
+
+    // case 2.0 : delta empty
     String personKey2 = "People:5000:0";
     String jsonPerson2 = new ObjectMapper().writeValueAsString(personList1);
     // set up mock behavior
-    when(commands.jsonGet(personKey2 , "$")).thenReturn(jsonPerson2);
+    when(commands.jsonGet(personKey2, "$")).thenReturn(jsonPerson2);
     // call method using mock object
-    ResponseEntity<Map<String, Object>> result2 =
-    controller.updatePersonById("5000", "user2" , map);
+    ResponseEntity<Map<String, Object>> result2 = controller.updatePersonById("5000", "user2", map);
     System.out.println(result2);
     // verify that mock behavior was called
-    verify(commands).jsonGet(personKey2 , "$");
+    verify(commands , times(3)).jsonGet(personKey2, "$");
     // check result
     assertEquals("enter relevant data to update",
-    result2.getBody().get("message"));
+        result2.getBody().get("message"));
+
+    // case 2.1 : delta null 
+    String personKey4 = "People:5000:0";
+    String jsonPerson4 = new ObjectMapper().writeValueAsString(personList1);
+    // set up mock behavior
+    when(commands.jsonGet(personKey4, "$")).thenReturn(jsonPerson4);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result4 = controller.updatePersonById("5000", "user2", null);
+    System.out.println(result4);
+    // verify that mock behavior was called
+    verify(commands , times(4)).jsonGet(personKey4, "$");
+    // check result
+    assertEquals("enter relevant data to update",
+        result2.getBody().get("message"));
 
     // case 3 : working
     String personKey3 = "People:1000:0";
@@ -349,9 +491,9 @@ public class junitTest {
     String jsonTime = new ObjectMapper().writeValueAsString(time);
     when(commands.jsonSet(personKey3, "$.updatedOn0", jsonTime, SetMode.XX)).thenReturn("OK");
     delta.put("updatedOn0", time);
-    //verify(commands).jsonSet(personKey3, "$.updatedOn0", jsonTime, SetMode.XX);
+    // verify(commands).jsonSet(personKey3, "$.updatedOn0", jsonTime, SetMode.XX);
 
-    String hashKey1 = "version:People:1000" ;
+    String hashKey1 = "version:People:1000";
     when(commands.hget(hashKey1, "v")).thenReturn("5");
     when(commands.hset(hashKey1, "v", "6")).thenReturn(true);
     String deltaKey = "People:1000:6";
@@ -360,7 +502,7 @@ public class junitTest {
     when(commands.jsonSet(deltaKey, "$", value, SetMode.NX)).thenReturn("OK");
 
     // set up mock behavior
-    
+
     // call method using mock object
     ResponseEntity<Map<String, Object>> result3 = controller.updatePersonById("1000", "user2", map);
     System.out.println(result3);
@@ -373,24 +515,41 @@ public class junitTest {
 
   @Test
   public void testApiGetAll() throws Exception {
-    
+
     when(connection.sync()).thenReturn(commands);
+
+    // case 0 : get all empty list
+    SearchOptions<String, String> options0 = SearchOptions.<String, String>builder()
+        .limit(0, 5)
+        .returnFields("name")
+        .sortBy(SortBy.asc("id"))
+        .build();
+
+    SearchResults<String, String> searchResults0 = new SearchResults<>();
+    // set up mock behavior
+    when(commands.ftSearch(eq("pidx"), eq("@active0:{true}"), any())).thenReturn(searchResults0);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result0 = controller.getAllPerson(null, null, null, null);
+    System.out.println(result0);
+    // verify that mock behavior was called
+    verify(commands).ftSearch(eq("pidx"), eq("@active0:{true}"), any());
+    // check result
+    assertEquals(400, result0.getBody().get("code"));
 
     // case 1 : get all empty list
     SearchOptions<String, String> options1 = SearchOptions.<String, String>builder()
-                .limit(0, 5)
-                .returnFields("name")
-                .sortBy(SortBy.asc("id"))
-                .build();
+        .limit(0, 5)
+        .returnFields("name")
+        .sortBy(SortBy.asc("id"))
+        .build();
 
-    
     // set up mock behavior
     when(commands.ftSearch(eq("pidx"), eq("@active0:{true}"), any())).thenReturn(null);
     // call method using mock object
     ResponseEntity<Map<String, Object>> result1 = controller.getAllPerson(null, null, null, null);
     System.out.println(result1);
     // verify that mock behavior was called
-    verify(commands).ftSearch(eq("pidx"), eq("@active0:{true}"), any());
+    verify(commands, times(2)).ftSearch(eq("pidx"), eq("@active0:{true}"), any());
     // check result
     assertEquals(400, result1.getBody().get("code"));
 
@@ -412,12 +571,12 @@ public class junitTest {
     person3.setAge(22);
     person3.setactive0(false);
 
-    //case 2 : active only , no limit , no offset
+    // case 2 : active only , no limit , no offset
     SearchOptions<String, String> options2 = SearchOptions.<String, String>builder()
-                .limit(0, 5)
-                .returnFields("name")
-                .sortBy(SortBy.asc("id"))
-                .build();
+        .limit(0, 5)
+        .returnFields("name")
+        .sortBy(SortBy.asc("id"))
+        .build();
 
     SearchResults<String, String> searchResults1 = new SearchResults<>();
 
@@ -425,7 +584,6 @@ public class junitTest {
     Document document1 = new Document<>();
     document1.put("name", person1.getName());
     document1.setId("People:1000:0");
-    
 
     Document document2 = new Document<>();
     document2.put("name", person2.getName());
@@ -437,17 +595,16 @@ public class junitTest {
     // set up mock behavior
     when(commands.ftSearch(eq("pidx"), eq("@active0:{true}"), any())).thenReturn(searchResults1);
     System.out.println(searchResults1);
-     MockHttpServletResponse response = new MockHttpServletResponse();
+    MockHttpServletResponse response = new MockHttpServletResponse();
     // call method using mock object
-    ResponseEntity<Map<String, Object>> result2 = controller.getAllPerson(null, null, null, response);
+    ResponseEntity<Map<String, Object>> result2 = controller.getAllPerson(false, null, null, response);
     System.out.println(result2);
     // verify that mock behavior was called
-    verify(commands , times(2)).ftSearch(eq("pidx"), eq("@active0:{true}"), any());
+    verify(commands, times(3)).ftSearch(eq("pidx"), eq("@active0:{true}"), any());
     // check result
     assertEquals(200, result2.getBody().get("code"));
 
-
-    //inact true 
+    // inact true
     SearchResults<String, String> searchResults2 = new SearchResults<>();
 
     Document document3 = new Document<>();
@@ -458,12 +615,11 @@ public class junitTest {
     searchResults2.add(document2);
     searchResults2.add(document3);
 
-
     SearchOptions<String, String> options3 = SearchOptions.<String, String>builder()
-                .limit(0, 5)
-                .returnFields("name")
-                .sortBy(SortBy.asc("id"))
-                .build();
+        .limit(0, 5)
+        .returnFields("name")
+        .sortBy(SortBy.asc("id"))
+        .build();
 
     // set up mock behavior
     when(commands.ftSearch(eq("pidx"), eq("*"), any())).thenReturn(searchResults2);
@@ -476,7 +632,7 @@ public class junitTest {
     // check result
     assertEquals(200, result3.getBody().get("code"));
 
-    //limit = 1, offset = 1  
+    // limit = 1, offset = 1
     SearchResults<String, String> searchResults3 = new SearchResults<>();
 
     Document document4 = new Document<>();
@@ -486,12 +642,11 @@ public class junitTest {
     searchResults3.add(document2);
     searchResults3.setCount(3);
 
-
     SearchOptions<String, String> options4 = SearchOptions.<String, String>builder()
-                .limit(1, 1)
-                .returnFields("name")
-                .sortBy(SortBy.asc("id"))
-                .build();
+        .limit(1, 1)
+        .returnFields("name")
+        .sortBy(SortBy.asc("id"))
+        .build();
 
     // set up mock behavior
     when(commands.ftSearch(eq("pidx"), eq("*"), any())).thenReturn(searchResults3);
@@ -500,12 +655,11 @@ public class junitTest {
     ResponseEntity<Map<String, Object>> result4 = controller.getAllPerson(true, 1, 1, response);
     System.out.println(result4);
     // verify that mock behavior was called
-    verify(commands , times(2)).ftSearch(eq("pidx"), eq("*"), any());
+    verify(commands, times(2)).ftSearch(eq("pidx"), eq("*"), any());
     // check result
     assertEquals(200, result4.getBody().get("code"));
 
   }
-
 
   @Test
   public void testApiGetById() throws Exception {
@@ -521,21 +675,23 @@ public class junitTest {
     Map<String, Object> delta1 = new LinkedHashMap<String, Object>();
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
     String time = timestamp.toString();
-  
+
     map1.put("name", "tanishka");
     delta1.put("data", map1);
     delta1.put("updatedBy0", "user2");
     delta1.put("updatedOn0", time);
 
-
     Map<String, Object> map2 = new LinkedHashMap<String, Object>();
     Map<String, Object> detail2 = new LinkedHashMap<String, Object>();
     Map<String, Object> delta2 = new LinkedHashMap<String, Object>();
     Timestamp timestamp2 = new Timestamp(System.currentTimeMillis());
-    String time2 = timestamp.toString();
-  
+    String time2 = timestamp2.toString();
+
     detail2.put("sport", "football");
-    map2.put("age", 45);
+    detail2.put("pet", "dog");
+    map2.put("age", 24);
+    map2.put("mobNo", "1234567890");
+    map2.put("dob", "18-03-2000");
     map2.put("detail", detail2);
     delta2.put("data", map2);
     delta2.put("updatedBy0", "user3");
@@ -543,11 +699,13 @@ public class junitTest {
 
     Person person0 = person1;
     person0.setName("tanishka");
-    person0.setAge(45);
+    person0.setAge(24);
+    person0.setMobNo("1234567890");
+    person0.setDob("18-03-2000");
     person0.setDetail("sport", "football");
+    person0.setDetail("pet", "dog");
     person0.setupdatedBy0("user3");
     person0.setupdatedOn0(time2);
-
 
     List<Map<String, Object>> deltaList1 = new ArrayList<Map<String, Object>>();
     deltaList1.add(delta1);
@@ -575,10 +733,9 @@ public class junitTest {
     personList3.add(person2);
     String jsonPerson3 = new ObjectMapper().writeValueAsString(personList3);
 
-
     when(connection.sync()).thenReturn(commands);
 
-    //case 1: id does not exist
+    // case 1: id does not exist
     String personKey1 = "People:1:0";
     // set up mock behavior
     when(commands.jsonGet(personKey1, "$")).thenReturn(null);
@@ -590,8 +747,7 @@ public class junitTest {
     // check result
     assertEquals("enter valid id", result1.getBody().get("message"));
 
-
-    //case 2: min null max null
+    // case 2: min null max null
     String personKey2 = "People:1000:0";
     // set up mock behavior
     when(commands.jsonGet(personKey2, "$")).thenReturn(jsonPerson0);
@@ -603,9 +759,26 @@ public class junitTest {
     // check result
     assertEquals(200, result2.getBody().get("code"));
 
+    // case 7: catch
+    String personKey10 = "People:1000:0";
+    String personKey11 = "People:1000:1";
+    String deltaKey4 = "People:1000:2";
 
+    // set up mock behavior
+    when(commands.jsonGet(personKey10, "$")).thenReturn(jsonPerson0);
+    when(commands.jsonGet(personKey11, "$")).thenReturn(jsonPerson1);
+    when(commands.jsonGet(deltaKey4, "$")).thenReturn(null);
 
-    //case 3: min null max 2
+    // delta_v = commands.jsonGet(key_v, "$");
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result7 = controller.getPersonById("1000", null, 2);
+    System.out.println(result7);
+    // verify that mock behavior was called
+    verify(commands, times(2)).jsonGet(personKey10, "$");
+    // check result
+    assertEquals(400, result7.getBody().get("code"));
+
+    // case 3: min null max 2
     String personKey3 = "People:1000:0";
     String personKey4 = "People:1000:1";
     String deltaKey1 = "People:1000:2";
@@ -620,12 +793,11 @@ public class junitTest {
     ResponseEntity<Map<String, Object>> result3 = controller.getPersonById("1000", null, 2);
     System.out.println(result3);
     // verify that mock behavior was called
-    verify(commands, times(2)).jsonGet(personKey3, "$");
+    verify(commands, times(3)).jsonGet(personKey3, "$");
     // check result
     assertEquals(200, result3.getBody().get("code"));
 
-
-    //case 4: min 1 AND max null
+    // case 4: min 1 AND max null
     String personKey5 = "People:1000:0";
     String personKey6 = "People:1000:1";
     String deltaKey2 = "People:1000:2";
@@ -642,12 +814,11 @@ public class junitTest {
     ResponseEntity<Map<String, Object>> result4 = controller.getPersonById("1000", 1, null);
     System.out.println(result4);
     // verify that mock behavior was called
-    verify(commands, times(3)).jsonGet(personKey5, "$");
+    verify(commands, times(4)).jsonGet(personKey5, "$");
     // check result
     assertEquals(200, result4.getBody().get("code"));
 
-
-    //case 5: min 2 AND max 3
+    // case 5: min 2 AND max 3
     String personKey7 = "People:1000:0";
     String personKey8 = "People:1000:1";
     String deltaMaxKey3 = "People:1000:3";
@@ -666,15 +837,39 @@ public class junitTest {
     ObjectMapper mapper = new ObjectMapper();
     Person checkPerson = mapper.convertValue(testOutput, Person.class);
     System.out.println(checkPerson.getName());
-    
 
     // verify that mock behavior was called
-    verify(commands , times(4)).jsonGet(personKey5, "$");
+    verify(commands, times(5)).jsonGet(personKey5, "$");
     // check result
     assertEquals("tanishka", checkPerson.getName());
 
 
-    //case 1: id deleted (inactive)
+    // case 7: min 3 AND max null
+    String personKey12 = "People:1000:0";
+    String personKey13 = "People:1000:1";
+    String deltaMinKey1 = "People:1000:2";
+    String deltaMinKey2 = "People:1000:3";
+    // set up mock behavior
+    when(commands.jsonGet(personKey12, "$")).thenReturn(jsonPerson0);
+    when(commands.jsonGet(personKey13, "$")).thenReturn(jsonPerson1);
+    when(commands.jsonGet(deltaMinKey1, "$")).thenReturn(jsonDelta1);
+    when(commands.jsonGet(deltaMinKey2, "$")).thenReturn(jsonDelta2);
+
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result8 = controller.getPersonById("1000", 3, null);
+    System.out.println(result8.getBody().get("base"));
+    Object testOutput2 = result8.getBody().get("base");
+
+    Person checkPerson2 = mapper.convertValue(testOutput, Person.class);
+    System.out.println(checkPerson.getAge());
+
+    // verify that mock behavior was called
+    verify(commands, times(6)).jsonGet(personKey5, "$");
+    // check result
+    assertEquals(24, checkPerson.getAge());
+
+
+    // case 6: id deleted (inactive)
     String personKey9 = "People:5000:0";
     // set up mock behavior
     when(commands.jsonGet(personKey9, "$")).thenReturn(jsonPerson3);
@@ -686,9 +881,6 @@ public class junitTest {
     // check result
     assertEquals("enter valid id", result1.getBody().get("message"));
 
-
   }
-
-
 
 }
