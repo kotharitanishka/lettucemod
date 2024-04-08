@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.configurationprocessor.json.JSONArray;
 import org.springframework.boot.configurationprocessor.json.JSONException;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
@@ -55,21 +56,31 @@ import org.springframework.web.bind.annotation.RequestBody;
 @RestController
 public class Controller {
 
-    // create modules client
-    RedisModulesClient client = RedisModulesClient.create(RedisURI.create("localhost", 6379));
+    // // create modules client
+    // RedisModulesClient client =
+    // RedisModulesClient.create(RedisURI.create("localhost", 6379));
 
-    // connect to redis server
-    StatefulRedisModulesConnection<String, String> connection = client.connect();
+    // // connect to redis server
+    // StatefulRedisModulesConnection<String, String> connection = client.connect();
 
-    // Obtain the command API for synchronous execution.
-    RedisModulesCommands<String, String> commands = connection.sync();
+    // // Obtain the command API for synchronous execution.
+    // RedisModulesCommands<String, String> commands = connection.sync();
+
+    @Autowired
+    StatefulRedisModulesConnection<String, String> connection;
+
+    RedisModulesCommands<String, String> commands;
+
+
 
     public Map<String, Object> jsonResponse(SearchResults<String, String> ans) {
 
         Map<String, Object> m1 = new LinkedHashMap<String, Object>();
         // System.out.println(ans.get(0).getId().split(":")[1]);
+        // System.out.println(ans);
         Integer c = ans.size();
         for (Integer i = 0; i < c; i++) {
+            // System.out.println(ans.get(i).getId());
             String k1 = (ans.get(i).getId().split(":")[1]);
             String k = k1;
             Object v = (ans.toArray()[i]);
@@ -83,6 +94,8 @@ public class Controller {
     @PostMapping("/new")
     public ResponseEntity<Map<String, Object>> addPerson(@RequestBody @Valid Person p,
             @RequestParam(required = false) String user) {
+
+        commands = connection.sync();
         String p_json;
         // System.out.println("\n\ntest\n");
         Map<String, Object> map = new LinkedHashMap<String, Object>();
@@ -91,8 +104,9 @@ public class Controller {
 
         if (user == null || user.isEmpty()) {
             System.out.println("\n\n\nuser is null\n\n\n");
-            map.put("error", "ERROR : enter audit field user ");
-            map.put("code", HttpStatus.BAD_REQUEST);
+            map.put("message", "ERROR : enter audit field user");
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
             // return new ResponseEntity<String>("ERROR : enter audit field user ",
@@ -101,8 +115,9 @@ public class Controller {
         if (p.getId() == null) {
             // return new ResponseEntity<String>("cannot create without id",
             // HttpStatus.BAD_REQUEST);
-            map.put("error", "cannot create without id");
-            map.put("code", HttpStatus.BAD_REQUEST);
+            map.put("message", "cannot create without id");
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
@@ -135,8 +150,9 @@ public class Controller {
             p_json = new ObjectMapper().writeValueAsString(p);
             commands.jsonSet(key_p0, "$", p_json, SetMode.NX);
             if (s1 == null) {
-                map.put("error", "id already exists");
-                map.put("code", HttpStatus.BAD_REQUEST);
+                map.put("message", "id already exists");
+                map.put("error", HttpStatus.BAD_REQUEST.name());
+                map.put("code", HttpStatus.BAD_REQUEST.value());
                 result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
                 return result;
                 // return new ResponseEntity<String>("id already exists",
@@ -145,8 +161,9 @@ public class Controller {
             String hkey = "version:People:" + p.getId();
             commands.hset(hkey, "v", "1");
 
-            map.put("success", "created new person " + p.getId());
-            map.put("code", HttpStatus.OK);
+            map.put("message", "created new person " + p.getId());
+            map.put("success", HttpStatus.OK.name());
+            map.put("code", HttpStatus.OK.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
             return result;
 
@@ -165,6 +182,7 @@ public class Controller {
     public ResponseEntity<Map<String, Object>> getAllPerson(@RequestParam(required = false) Boolean inact,
             @RequestParam(required = false) Integer offset, @RequestParam(required = false) Integer limit,
             HttpServletResponse resp) {
+        commands = connection.sync();
         SearchResults<String, String> ans;
         limit = (limit == null) ? 5 : limit;
         if (offset == null) {
@@ -178,7 +196,7 @@ public class Controller {
         ResponseEntity<Map<String, Object>> result;
         result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
 
-        SearchOptions<String, String> options = SearchOptions.<String, String>builder()
+        SearchOptions<String, String> options1 = SearchOptions.<String, String>builder()
                 .limit(offset, limit)
                 .returnFields("name")
                 .sortBy(SortBy.asc("id"))
@@ -186,16 +204,18 @@ public class Controller {
         // Integer.parseInt(id)
 
         if (inact == null || inact == false) {
-            ans = commands.ftSearch("pidx", "@active0:{true}", options);
+            ans = commands.ftSearch("pidx", "@active0:{true}", options1);
             // System.out.println(ans);
         } else {
-            ans = commands.ftSearch("pidx", "*", options);
+            ans = commands.ftSearch("pidx", "*", options1);
         }
+        // System.out.println(ans);
         // Map<String, Object> map = new LinkedHashMap<String, Object>();
 
-        if (ans.isEmpty() == true) {
-            map.put("error", "ERROR");
-            map.put("code", HttpStatus.BAD_REQUEST);
+        if (ans == null || ans.isEmpty() == true) {
+            map.put("message", "list empty");
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
             // map.put("data", List.of());
@@ -207,6 +227,7 @@ public class Controller {
             resp.setHeader("TotalCount", tcount);
 
             map.put("data", jsonResponse(ans));
+            // System.out.println(jsonResponse(ans));
             ;
             Integer t;
             if (limit >= tc) {
@@ -218,8 +239,8 @@ public class Controller {
 
             map.put("nextOffset", t);
             map.put("lastPage", lp);
-            map.put("success", "true");
-            map.put("code", HttpStatus.OK);
+            map.put("success", HttpStatus.OK.name());
+            map.put("code", HttpStatus.OK.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
             return result;
             // return map;
@@ -227,6 +248,7 @@ public class Controller {
     }
 
     public Person keyToPerson(String key) {
+        commands = connection.sync();
         String person = commands.jsonGet(key, "$");
         if (person == null) {
             return null;
@@ -247,6 +269,8 @@ public class Controller {
     public ResponseEntity<Map<String, Object>> getPersonById(@RequestParam String id,
             @RequestParam(required = false) Integer min, @RequestParam(required = false) Integer max) {
 
+        commands = connection.sync();
+
         String key_p = "People:" + id + ":0";
         Person p0 = keyToPerson(key_p);
         Map<String, Object> map = new LinkedHashMap<String, Object>();
@@ -256,8 +280,9 @@ public class Controller {
 
         // Person p0 = keyToPerson(key_p);
         if (p0 == null) {
-            map.put("error", "ERROR");
-            map.put("code", HttpStatus.BAD_REQUEST);
+            map.put("message", "enter valid id");
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
             // return map;
@@ -272,8 +297,8 @@ public class Controller {
                         if (max == null) {
                             map.put("base", p0);
                             map.put("history", versions);
-                            map.put("sucess", "true");
-                            map.put("code", HttpStatus.OK);
+                            map.put("success", HttpStatus.OK.name());
+                            map.put("code", HttpStatus.OK.value());
                             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
                             return result;
                             // return map;
@@ -320,15 +345,16 @@ public class Controller {
                     }
                     map.put("history", versions);
                     map.put("success", "true");
-                    map.put("code", HttpStatus.OK);
+                    map.put("code", HttpStatus.OK.value());
                     result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
                     return result;
 
                     // return map;
 
                 } else {
-                    map.put("error", "ERROR");
-                    map.put("code", HttpStatus.BAD_REQUEST);
+                    map.put("message", "enter valid id");
+                    map.put("error", HttpStatus.BAD_REQUEST.name());
+                    map.put("code", HttpStatus.BAD_REQUEST.value());
                     result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
                     return result;
                     // return map;
@@ -346,8 +372,14 @@ public class Controller {
 
     }
 
+    public SearchOptions<String, String> options2 = SearchOptions.<String, String>builder()
+            .sortBy(SortBy.asc("id"))
+            .build();
+
     @GetMapping("/getByName")
     public ResponseEntity<Map<String, Object>> getPersonByName(@RequestParam String n) {
+
+        commands = connection.sync();
 
         String q;
         Map<String, Object> map = new LinkedHashMap<String, Object>();
@@ -355,19 +387,20 @@ public class Controller {
         ResponseEntity<Map<String, Object>> result;
         result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
         q = "(@name:" + n + " & @active0:{true})";
-        SearchOptions<String, String> options = SearchOptions.<String, String>builder()
-                .sortBy(SortBy.asc("id"))
-                .build();
-        SearchResults<String, String> s = commands.ftSearch("pidx", q, options);
+
+        SearchResults<String, String> s = commands.ftSearch("pidx", q, options2);
         // Map<String, Object> map = new LinkedHashMap<String, Object>();
-        if (s.isEmpty() == true) {
+        if (s == null || s.isEmpty() == true) {
             map.put("data", List.of());
-            map.put("error", "ERROR");
-            map.put("code", HttpStatus.BAD_REQUEST);
+            // list.of() --> collections.emptylist
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
             // return map;
         } else {
+
+            System.out.println(s);
 
             Object[] ob = new Object[s.size()];
             String s0;
@@ -387,8 +420,8 @@ public class Controller {
 
             }
             map.put("data", plist);
-            map.put("success", "true");
-            map.put("code", HttpStatus.OK);
+            map.put("success", HttpStatus.OK.name());
+            map.put("code", HttpStatus.OK.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
             return result;
 
@@ -400,6 +433,8 @@ public class Controller {
     public ResponseEntity<Map<String, Object>> updatePersonById(@RequestParam String id, @RequestParam String user,
             @RequestBody(required = false) Map<String, Object> m) {
 
+        commands = connection.sync();
+
         String key_p0 = "People:" + id + ":0";
         Person p0 = keyToPerson(key_p0);
         // System.out.println(p0.getClass().getDeclaredFields());
@@ -408,19 +443,12 @@ public class Controller {
         result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
 
         if (p0 == null || p0.isactive0() == false) {
-            map.put("error", "enter relevant id");
-            map.put("code", HttpStatus.BAD_REQUEST);
-            // return null;
-            // return new ResponseEntity<String>("enter relevant id",
-            // HttpStatus.NO_CONTENT);
-            // ResponseEntity<Map<String, Object>> n = new
+            map.put("message", "enter relevant id");
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return (result);
-            // return null ;
-            // new result.status(HttpStatus.NOT_FOUND).body(map);
-            // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
-            // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
-            // return map;
+
         }
         java.lang.reflect.Field f[] = p0.getClass().getDeclaredFields();
         Set<String> p_keys = new LinkedHashSet<String>();
@@ -431,8 +459,9 @@ public class Controller {
         }
 
         if (m == null || m.isEmpty() == true) {
-            map.put("error", "enter relevant data to update");
-            map.put("code", HttpStatus.NO_CONTENT);
+            map.put("message", "enter relevant data to update");
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             // ResponseEntity.status(HttpStatus.NO_CONTENT).body(map);
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
@@ -502,8 +531,9 @@ public class Controller {
             String value = new ObjectMapper().writeValueAsString(delta);
             commands.jsonSet(key_p, "$", value, SetMode.NX);
 
-            map.put("success", "updated");
-            map.put("code", HttpStatus.OK);
+            map.put("message", "updated");
+            map.put("success", HttpStatus.OK.name());
+            map.put("code", HttpStatus.OK.value());
             // ResponseEntity.status(HttpStatus.OK).body(map);
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
             return result;
@@ -561,16 +591,19 @@ public class Controller {
     @DeleteMapping("/deleteById")
     public ResponseEntity<Map<String, Object>> deletePersonById(@RequestParam String id, @RequestParam String user) {
 
+        commands = connection.sync();
         String hkey = "version:People:" + id;
         String ver = commands.hget(hkey, "v");
+        System.out.println(ver);
         Map<String, Object> delta = new LinkedHashMap<String, Object>();
         Map<String, Object> map = new LinkedHashMap<String, Object>();
         ResponseEntity<Map<String, Object>> result;
         result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
         // ResponseEntity<Object> result = new ResponseEntity<Object>();
         if (ver == null) {
-            map.put("error", "enter valid id");
-            map.put("code", HttpStatus.BAD_REQUEST);
+            map.put("message", "enter valid id");
+            map.put("error", HttpStatus.BAD_REQUEST.name());
+            map.put("code", HttpStatus.BAD_REQUEST.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
             return result;
             // return new ResponseEntity<String>("enter relevant id",
@@ -581,11 +614,13 @@ public class Controller {
             String key_p0 = "People:" + id + ":0";
             Person p0 = keyToPerson(key_p0);
             if (p0 == null || p0.isactive0() == false) {
+
                 // map.put("base", versions);
                 // map.put("history", versions);
                 // return map;
-                map.put("error", "enter valid id");
-                map.put("code", HttpStatus.BAD_REQUEST);
+                map.put("message", "enter valid id");
+                map.put("error", HttpStatus.BAD_REQUEST.name());
+                map.put("code", HttpStatus.BAD_REQUEST.value());
                 result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
                 return result;
                 // return new ResponseEntity<String>("enter relevant id",
