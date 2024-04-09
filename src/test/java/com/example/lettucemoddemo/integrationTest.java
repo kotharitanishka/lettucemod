@@ -1,34 +1,39 @@
 package com.example.lettucemoddemo;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-
-import org.json.JSONString;
-import org.junit.jupiter.api.DisplayName;
+import org.apache.coyote.BadRequestException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.web.client.HttpClientErrorException.BadRequest;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-import static org.springframework.test.web.servlet.setup.MockMvcBuilders.*;
-
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 import com.example.lettucemoddemo.controller.Controller;
 import com.example.lettucemoddemo.model.Person;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.redis.lettucemod.api.StatefulRedisModulesConnection;
+import com.redis.lettucemod.api.sync.RedisModulesCommands;
+import com.redis.lettucemod.search.SearchResults;
 
 @WebMvcTest(controllers = Controller.class)
 public class integrationTest {
-       
+
        @Autowired
        private MockMvc mockMvc;
 
@@ -40,12 +45,14 @@ public class integrationTest {
               // name does not exist
               mockMvc.perform(get("/getByName")
                             .contentType("application/json")
-                            .param("n", "sanika")).andExpect(status().isBadRequest());
+                            .param("n", "sanika")).andExpect(status().isBadRequest())
+                            .andReturn();
 
               // name exist
               mockMvc.perform(get("/getByName")
                             .contentType("application/json")
-                            .param("n", "akshit")).andExpect(status().isOk());
+                            .param("n", "akshit")).andExpect(status().isOk()).andReturn();
+
        }
 
        @Test
@@ -239,7 +246,7 @@ public class integrationTest {
                             .content(u)).andExpect(status().isBadRequest());
 
               // working
-              p.setId("19");
+              p.setId("20");
               p.setName("palak");
               p.setAge(22);
               p.setMobNo("1234567890");
@@ -270,7 +277,7 @@ public class integrationTest {
               // working
               mockMvc.perform(delete("/deleteById")
                             .contentType("application/json")
-                            .param("id", "133")
+                            .param("id", "137")
                             .param("user", "user2")).andExpect(status().isOk());
        }
 

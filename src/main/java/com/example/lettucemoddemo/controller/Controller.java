@@ -56,20 +56,20 @@ import org.springframework.web.bind.annotation.RequestBody;
 @RestController
 public class Controller {
 
-    // // create modules client
-    // RedisModulesClient client =
-    // RedisModulesClient.create(RedisURI.create("localhost", 6379));
+    // create modules client
+    RedisModulesClient client =
+    RedisModulesClient.create(RedisURI.create("localhost", 6379));
 
-    // // connect to redis server
-    // StatefulRedisModulesConnection<String, String> connection = client.connect();
+    // connect to redis server
+    StatefulRedisModulesConnection<String, String> connection = client.connect();
 
-    // // Obtain the command API for synchronous execution.
-    // RedisModulesCommands<String, String> commands = connection.sync();
+    // Obtain the command API for synchronous execution.
+    RedisModulesCommands<String, String> commands = connection.sync();
 
-    @Autowired
-    StatefulRedisModulesConnection<String, String> connection;
+    // @Autowired
+    // StatefulRedisModulesConnection<String, String> connection;
 
-    RedisModulesCommands<String, String> commands;
+    // RedisModulesCommands<String, String> commands;
 
     public Map<String, Object> jsonResponse(SearchResults<String, String> ans) {
 
