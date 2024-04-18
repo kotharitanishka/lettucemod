@@ -8,11 +8,13 @@ import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 @JsonPropertyOrder({"id" , "name" , "age" , "mobNo", "dob", "detail" , "createdBy0" , "createdOn0" , "updatedBy0" , "updatedOn0" , "active0"})
 public class Person {
 
+    
     private String id; 
 
     private String name ;

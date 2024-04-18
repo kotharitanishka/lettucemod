@@ -1,35 +1,48 @@
 package com.example.lettucemoddemo.controller;
 
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.reactive.function.BodyInserters;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClient.UriSpec;
 
 import com.example.lettucemoddemo.model.Person;
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonParser;
+import com.example.lettucemoddemo.utils.JwtUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.redis.lettucemod.RedisModulesClient;
 import com.redis.lettucemod.api.StatefulRedisModulesConnection;
 import com.redis.lettucemod.api.sync.RedisModulesCommands;
 import com.redis.lettucemod.json.SetMode;
 import com.redis.lettucemod.search.CreateOptions;
+import com.redis.lettucemod.search.Document;
 import com.redis.lettucemod.search.Field;
-//import com.redis.lettucemod.search.Field;
 import com.redis.lettucemod.search.SearchOptions;
 import com.redis.lettucemod.search.SearchResults;
 import com.redis.lettucemod.search.SearchOptions.SortBy;
 
 import io.lettuce.core.RedisURI;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import okhttp3.HttpUrl;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
-//import java.lang.reflect.Field;
-//import java.lang.reflect.Field;
+import java.io.IOException;
 import java.sql.Timestamp;
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -37,17 +50,19 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.configurationprocessor.json.JSONArray;
 import org.springframework.boot.configurationprocessor.json.JSONException;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
-import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -57,8 +72,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 public class Controller {
 
     // create modules client
-    RedisModulesClient client =
-    RedisModulesClient.create(RedisURI.create("localhost", 6379));
+    RedisModulesClient client = RedisModulesClient.create(RedisURI.create("localhost", 6379));
 
     // connect to redis server
     StatefulRedisModulesConnection<String, String> connection = client.connect();
@@ -71,21 +85,227 @@ public class Controller {
 
     // RedisModulesCommands<String, String> commands;
 
+    OkHttpClient client1 = new OkHttpClient();
+
+    WebClient client3 = WebClient.create();
+
+
+
+    @PostMapping("/loginUser")
+    public String login (@RequestBody Map<String , String> loginRequest){
+        System.out.println(loginRequest);
+        JwtUtil jwtUtil = new JwtUtil();
+        if (loginRequest.get("username").equals("user") && loginRequest.get("password").equals("1234")){
+            String token = jwtUtil.generateToken(loginRequest.get("username"));
+            return token;
+        }
+        return null;
+    }
+
+
+
+    
+    @Tag(name = "Ext Get", description = "GET methods of External Api to get electronics info")
+    @GetMapping("/checkListAll")
+    public ResponseEntity<Map<String, Object>> checkAPIListAll() {
+
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+        WebClient.ResponseSpec responseSpec = client3.get()
+                .uri("https://api.restful-api.dev/objects")
+                .retrieve();
+
+        List<Map<String, Object>> responseBody = responseSpec.bodyToMono(List.class).block();
+
+        map.put("data", responseBody);
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
+
+    }
+
+    @Tag(name = "Ext Get", description = "GET methods of External Api to get electronics info")
+    @GetMapping("/checkListById/{id}")
+    public ResponseEntity<Map<String, Object>> checkAPIListById(@PathVariable String id) throws IOException {
+
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+        WebClient.ResponseSpec responseSpec = client3.get()
+                .uri("https://api.restful-api.dev/objects/" + id)
+                .retrieve();
+
+        JsonNode responseBody = responseSpec.bodyToMono(JsonNode.class).block();
+
+        map.put("data", responseBody);
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
+
+    }
+
+    @Tag(name = "Ext Get", description = "GET methods of External Api to get electronics info")
+    @GetMapping("/checkSingleObject/{id}")
+    public ResponseEntity<Map<String, Object>> checkAPISingleObject(@PathVariable String id) throws IOException {
+
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+        WebClient.ResponseSpec responseSpec = client3.get()
+                .uri("https://api.restful-api.dev/objects/" + id)
+                .retrieve();
+
+        JsonNode responseBody = responseSpec.bodyToMono(JsonNode.class).block();
+
+        map.put("data", responseBody);
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
+    }
+
+    @PostMapping("/redisPost")
+    public ResponseEntity<Map<String, Object>> redisPost() {
+
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+        WebClient.ResponseSpec responseSpec = client3.get()
+                .uri("https://api.restful-api.dev/objects")
+                .retrieve();
+
+        List<Map<String, Object>> responseBody = responseSpec.bodyToMono(List.class).block();
+
+        if (responseBody.contains("error")) {
+            map.put("message", "error in response of external API");
+            map.put("code", HttpStatus.BAD_REQUEST.value());
+            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            return result;
+        }
+
+        responseBody.stream().filter(x -> x.get("name").toString().contains("iPhone")).forEachOrdered(x -> {
+            String jsonBody;
+            try {
+                jsonBody = new ObjectMapper().writeValueAsString(x);
+                String id = x.get("id").toString();
+                String set = commands.jsonSet("external:" + id, "$", jsonBody);
+                System.out.println(set);
+            } catch (JsonProcessingException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+
+        });
+
+        // if (set == null) {
+        // map.put("message", "could not create in redis");
+        // map.put("code", HttpStatus.BAD_REQUEST.value());
+        // result = new ResponseEntity<Map<String, Object>>(map,
+        // HttpStatus.BAD_REQUEST);
+        // return result;
+        // }
+
+        map.put("message", "done");
+        map.put("created", responseBody);
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
+
+    }
+
+    @Tag(name = "Ext Post", description = "Post method of External Api to set electronics info")
+    @PostMapping("/checkAddObject")
+    public ResponseEntity<Map<String, Object>> checkAPIAddObject(@RequestBody Map<String, Object> jString) {
+
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+        WebClient.ResponseSpec responseSpec = client3.post()
+                .uri("https://api.restful-api.dev/objects")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .bodyValue(jString)
+                .retrieve();
+
+        Map<String, Object> responseBody = responseSpec.bodyToMono(Map.class).block();
+
+        map.put("message", "done");
+        map.put("created", responseBody);
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
+    }
+
+    @Tag(name = "Ext Modify", description = "Modify method of External Api to update , delete electronics info")
+    @PutMapping("/checkUpdateObject/{id}")
+    public ResponseEntity<Map<String, Object>> checkUpdateObject(@PathVariable String id,
+            @RequestBody Map<String, Object> jString) {
+
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+        WebClient.ResponseSpec responseSpec = client3.put()
+                .uri("https://api.restful-api.dev/objects/" + id)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .bodyValue(jString)
+                .retrieve();
+
+        Map<String, Object> responseBody = responseSpec.bodyToMono(Map.class).block();
+
+        map.put("message", "done");
+        map.put("updated", responseBody);
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
+    }
+
+    @Tag(name = "Ext Modify", description = "Modify method of External Api to update , delete electronics info")
+    @PatchMapping("/checkPartiallyUpdateObject/{id}")
+    public ResponseEntity<Map<String, Object>> checkPartiallyUpdateObject(@PathVariable String id,@RequestBody Map<String, Object> jString) {
+
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+        WebClient.ResponseSpec responseSpec = client3.patch()
+                .uri("https://api.restful-api.dev/objects/" + id)
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .bodyValue(jString)
+                .retrieve();
+
+        Map<String, Object> responseBody = responseSpec.bodyToMono(Map.class).block();
+
+        map.put("message", "done");
+        map.put("updated", responseBody);
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
+    }
+
+    @Tag(name = "Ext Modify", description = "Modify method of External Api to update , delete electronics info")
+    @DeleteMapping("/checkDeleteObject/{id}")
+    public ResponseEntity<Map<String, Object>> checkDeleteObject(@PathVariable String id) throws IOException {
+
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+        WebClient.ResponseSpec responseSpec = client3.delete()
+                .uri("https://api.restful-api.dev/objects/" + id)
+                .retrieve();
+
+        Map<String, Object> responseBody = responseSpec.bodyToMono(Map.class).block();
+
+        map.put("success", responseBody);
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
+    }
+
     public Map<String, Object> jsonResponse(SearchResults<String, String> ans) {
 
-        Map<String, Object> m1 = new LinkedHashMap<String, Object>();
-        // System.out.println(ans.get(0).getId().split(":")[1]);
-        // System.out.println(ans);
-        Integer c = ans.size();
-        for (Integer i = 0; i < c; i++) {
-            // System.out.println(ans.get(i).getId());
-            String k1 = (ans.get(i).getId().split(":")[1]);
-            String k = k1;
-            Object v = (ans.toArray()[i]);
-            m1.put(k, v);
-            // System.out.println(m1);
-        }
-        return m1;
+        Map<String, Object> jsonAnswer = new LinkedHashMap<String, Object>();
+        Stream<Document<String, String>> answerStream = ans.stream();
+        jsonAnswer = answerStream.collect(Collectors.toMap(key -> (key.getId().split(":")[1]), value -> value,
+                (document1, document2) -> document1));
+        return jsonAnswer;
 
     }
 
@@ -94,13 +314,17 @@ public class Controller {
             .prefixes("People:")
             .build();
 
+    @Tag(name = "Person Post", description = "Post data of Person")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Person added!", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "400", description = "Couldn't add person.", content = @Content(mediaType = "application/json")) })
     @PostMapping("/new")
-    public ResponseEntity<Map<String, Object>> addPerson(@RequestBody @Valid Person p,
-            @RequestParam(required = false) String user) {
+    public ResponseEntity<Map<String, Object>> addPerson(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Data of Person to add new", required = true) @RequestBody @Valid Person p,
+            @Parameter(description = "Audit field user", required = false) @RequestParam(required = false) String user) {
 
         commands = connection.sync();
         String p_json;
-        // System.out.println("\n\ntest\n");
         Map<String, Object> map = new LinkedHashMap<String, Object>();
         ResponseEntity<Map<String, Object>> result;
         result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
@@ -179,9 +403,15 @@ public class Controller {
         }
     }
 
+    @Tag(name = "Person Get", description = "GET data of Person")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Got the person list!", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "400", description = "Couldn't get person list.", content = @Content(mediaType = "application/json")) })
     @GetMapping("/getAll")
-    public ResponseEntity<Map<String, Object>> getAllPerson(@RequestParam(required = false) Boolean inact,
-            @RequestParam(required = false) Integer offset, @RequestParam(required = false) Integer limit,
+    public ResponseEntity<Map<String, Object>> getAllPerson(
+            @Parameter(description = "Inactive User", required = false) @RequestParam(required = false) Boolean inact,
+            @Parameter(description = "Page Offset", required = false) @RequestParam(required = false) Integer offset,
+            @Parameter(description = "Page Limit", required = false) @RequestParam(required = false) Integer limit,
             HttpServletResponse resp) {
         commands = connection.sync();
         SearchResults<String, String> ans;
@@ -266,9 +496,15 @@ public class Controller {
 
     }
 
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Got the person!", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "400", description = "Couldn't get the person.", content = @Content(mediaType = "application/json")) })
+    @Tag(name = "Person Get", description = "GET data of Person")
     @GetMapping("/getById")
-    public ResponseEntity<Map<String, Object>> getPersonById(@RequestParam String id,
-            @RequestParam(required = false) Integer min, @RequestParam(required = false) Integer max) {
+    public ResponseEntity<Map<String, Object>> getPersonById(
+            @Parameter(description = "Person Id", required = true) @RequestParam String id,
+            @Parameter(description = "Minimum version for base Person", required = false) @RequestParam(required = false) Integer min,
+            @Parameter(description = "Maximum versions for history", required = false) @RequestParam(required = false) Integer max) {
 
         commands = connection.sync();
 
@@ -378,8 +614,13 @@ public class Controller {
             .sortBy(SortBy.asc("id"))
             .build();
 
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Got the person!", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "400", description = "Couldn't get the person.", content = @Content(mediaType = "application/json")) })
+    @Tag(name = "Person Get", description = "GET data of Person")
     @GetMapping("/getByName")
-    public ResponseEntity<Map<String, Object>> getPersonByName(@RequestParam String n) {
+    public ResponseEntity<Map<String, Object>> getPersonByName(
+            @Parameter(description = "Name of Person you want", required = true) @RequestParam String n) {
 
         commands = connection.sync();
 
@@ -403,43 +644,47 @@ public class Controller {
         } else {
 
             System.out.println(s);
+            List<Person> plist;
 
-            Object[] ob = new Object[s.size()];
-            String s0;
-            Person pi;
-            Person[] plist = new Person[s.size()];
+            plist = s.stream()
+                    .map(x -> x.values().toArray()[1].toString())
+                    .map(x -> {
+                        try {
+                            return new ObjectMapper().readValue(x, Person.class);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                            return null;
+                        }
+                    })
+                    .collect(Collectors.toList());
+            System.out.println("\n plist by streams ==> " + plist);
 
-            for (int i = 0; i < ob.length; i++) {
-                try {
-                    ob[i] = s.get(i).values().toArray()[1];
-                    s0 = ob[i].toString();
-
-                    pi = new ObjectMapper().readValue(s0, Person.class);
-                    plist[i] = pi;
-                } catch (Exception e) {
-                    // e.printStackTrace();
-                    map.put("data", List.of());
-                    map.put("error", HttpStatus.BAD_REQUEST.name());
-                    map.put("code", HttpStatus.BAD_REQUEST.value());
-                    result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-                    return result;
-
-                }
-
+            if (plist == null) {
+                map.put("data", List.of());
+                map.put("error", HttpStatus.BAD_REQUEST.name());
+                map.put("code", HttpStatus.BAD_REQUEST.value());
+                result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+                return result;
             }
+
             map.put("data", plist);
             map.put("success", HttpStatus.OK.name());
             map.put("code", HttpStatus.OK.value());
             result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
             return result;
 
-            // return map;
         }
     }
 
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Person updated!", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "400", description = "Couldn't update person.", content = @Content(mediaType = "application/json")) })
+    @Tag(name = "Person Modify", description = "Modify data of Person to update or delete")
     @PutMapping("/updateById")
-    public ResponseEntity<Map<String, Object>> updatePersonById(@RequestParam String id, @RequestParam String user,
-            @RequestBody(required = false) Map<String, Object> m) {
+    public ResponseEntity<Map<String, Object>> updatePersonById(
+            @Parameter(description = "Id of Person you want to update", required = true) @RequestParam String id,
+            @Parameter(description = "Audit field", required = true) @RequestParam String user,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(description = "Data of Person to update", required = true) @RequestBody(required = false) Map<String, Object> m) {
 
         commands = connection.sync();
 
@@ -458,13 +703,10 @@ public class Controller {
             return (result);
 
         }
-        java.lang.reflect.Field f[] = p0.getClass().getDeclaredFields();
-        Set<String> p_keys = new LinkedHashSet<String>();
-        for (int fi = 0; fi < f.length; fi++) {
-            // System.out.println(f[fi].getName());
-            String fkey = f[fi].getName();
-            p_keys.add(fkey);
-        }
+
+        List<java.lang.reflect.Field> fieldsList = Arrays.asList(p0.getClass().getDeclaredFields());
+        Set<String> p_keys;
+        p_keys = fieldsList.stream().map(x -> x.getName()).collect(Collectors.toSet());
 
         if (m == null || m.isEmpty() == true) {
             map.put("message", "enter relevant data to update");
@@ -490,12 +732,9 @@ public class Controller {
                         String d[] = ob[i].toString().replace("{", "").replace("}", "").replace(" ", "").split(",");
                         // System.out.println(keys[i]);
                         for (int k = 0; k < d.length; k++) {
-                            // System.out.println(d[k].split("=")[0]);
                             String d_key = d[k].split("=")[0];
                             String d_val = d[k].split("=")[1];
-                            // System.out.println(d_val);
                             path = "$.detail" + "." + d_key;
-                            // System.out.println(path);
                             String u = new ObjectMapper().writeValueAsString(d_val);
                             String ans1 = commands.jsonSet(key_p0, path, u, SetMode.XX);
                             if (ans1 == null) {
@@ -593,8 +832,14 @@ public class Controller {
 
     }
 
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Person deleted!", content = @Content(mediaType = "application/json")),
+            @ApiResponse(responseCode = "400", description = "Couldn't delete person.", content = @Content(mediaType = "application/json")) })
+    @Tag(name = "Person Modify", description = "Modify data of Person to update or delete")
     @DeleteMapping("/deleteById")
-    public ResponseEntity<Map<String, Object>> deletePersonById(@RequestParam String id, @RequestParam String user) {
+    public ResponseEntity<Map<String, Object>> deletePersonById(
+            @Parameter(description = "Id of Person you want to delete", required = true) @RequestParam String id,
+            @Parameter(description = "Audit field user", required = true) @RequestParam String user) {
 
         commands = connection.sync();
         String hkey = "version:People:" + id;
