@@ -54,11 +54,16 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.configurationprocessor.json.JSONArray;
 import org.springframework.boot.configurationprocessor.json.JSONException;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.userdetails.User;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -89,22 +94,26 @@ public class Controller {
 
     WebClient client3 = WebClient.create();
 
-
+    @Autowired
+    AuthenticationManager authenticationManager;
 
     @PostMapping("/loginUser")
-    public String login (@RequestBody Map<String , String> loginRequest){
-        System.out.println(loginRequest);
+    public String login(@RequestBody Map<String, String> loginRequest) {
+
         JwtUtil jwtUtil = new JwtUtil();
-        if (loginRequest.get("username").equals("user") && loginRequest.get("password").equals("1234")){
-            String token = jwtUtil.generateToken(loginRequest.get("username"));
-            return token;
-        }
-        return null;
+        UsernamePasswordAuthenticationToken unauthenticatedObject = new UsernamePasswordAuthenticationToken(
+                loginRequest.get("username"), loginRequest.get("password"));
+
+        System.out.println("check unauthenticatedObject before auth ----> " + unauthenticatedObject);
+        Authentication authenticate = authenticationManager
+                .authenticate(unauthenticatedObject);
+        System.out.println("authenticate -->  : " + authenticate);
+        User user = (User) authenticate.getPrincipal();
+        String token = jwtUtil.generateToken(user.getUsername());
+        return token;
+        
     }
 
-
-
-    
     @Tag(name = "Ext Get", description = "GET methods of External Api to get electronics info")
     @GetMapping("/checkListAll")
     public ResponseEntity<Map<String, Object>> checkAPIListAll() {
@@ -260,7 +269,8 @@ public class Controller {
 
     @Tag(name = "Ext Modify", description = "Modify method of External Api to update , delete electronics info")
     @PatchMapping("/checkPartiallyUpdateObject/{id}")
-    public ResponseEntity<Map<String, Object>> checkPartiallyUpdateObject(@PathVariable String id,@RequestBody Map<String, Object> jString) {
+    public ResponseEntity<Map<String, Object>> checkPartiallyUpdateObject(@PathVariable String id,
+            @RequestBody Map<String, Object> jString) {
 
         ResponseEntity<Map<String, Object>> result;
         Map<String, Object> map = new LinkedHashMap<String, Object>();
