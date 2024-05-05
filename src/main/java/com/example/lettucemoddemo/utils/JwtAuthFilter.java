@@ -1,12 +1,16 @@
 package com.example.lettucemoddemo.utils;
 
 import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -18,7 +22,8 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
-    JwtUtil jwtUtil = new JwtUtil();
+    @Autowired
+    JwtUtil jwtUtil;
 
     @Autowired
     UserInfoService userInfoService;
@@ -30,21 +35,36 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
         String token = null;
         String username = null;
-        System.out.println("checking authhead in dofilter : " + authHeader);
+        //System.out.println("checking authhead in dofilter : " + authHeader);
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             token = authHeader.substring(7);
-            username = jwtUtil.extractUsername(token);
-            System.out.println("username in filter : " + username);
+            //System.out.println("token reached here --> " + token);
+            Boolean valid = jwtUtil.validateToken(token);
+            System.out.println("\nvalidity --> " + valid);
+            if (valid == false) {
+                System.out.println("\ntoken is expired . go to /refreshToken\n");
+            }
+            else {
+                username = jwtUtil.extractUsername(token);
+                System.out.println("username in filter : " + username);
+            }
         }
+
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             UserDetails userDetails = userInfoService.loadUserByUsername(username);
+            List<String> authority = jwtUtil.extractAuthority(token);
+            final Collection<? extends GrantedAuthority> authorities =
+                authority.stream()
+                        .map(SimpleGrantedAuthority::new)
+                        .collect(Collectors.toList());
             if (username.equals(userDetails.getUsername())) {
+                System.out.println("\n using extract auth --> " + jwtUtil.extractAuthority(token) + "\n");
                 UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(userDetails.getUsername(),
                         userDetails.getPassword(),
-                        userDetails.getAuthorities());
-                System.out.println("authtoken in filter --> " +  authToken);
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        authorities);
+                System.out.println("authtoken (authenticated object) in filter --> " +  authToken);
+                
                 SecurityContextHolder.getContext().setAuthentication(authToken);
             }
 

@@ -1,14 +1,12 @@
 package com.example.lettucemoddemo.controller;
 
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.reactive.function.client.WebClient.UriSpec;
-
 import com.example.lettucemoddemo.model.Person;
+import com.example.lettucemoddemo.model.UserAuth;
 import com.example.lettucemoddemo.utils.JwtUtil;
+import com.example.lettucemoddemo.utils.RSA;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -29,41 +27,35 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
-import okhttp3.HttpUrl;
-import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-
 import java.io.IOException;
 import java.sql.Timestamp;
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.configurationprocessor.json.JSONArray;
-import org.springframework.boot.configurationprocessor.json.JSONException;
 import org.springframework.boot.configurationprocessor.json.JSONObject;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.User;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -97,22 +89,123 @@ public class Controller {
     @Autowired
     AuthenticationManager authenticationManager;
 
-    @PostMapping("/loginUser")
-    public String login(@RequestBody Map<String, String> loginRequest) {
+    @Autowired
+    JwtUtil jwtUtil;
 
-        JwtUtil jwtUtil = new JwtUtil();
-        UsernamePasswordAuthenticationToken unauthenticatedObject = new UsernamePasswordAuthenticationToken(
-                loginRequest.get("username"), loginRequest.get("password"));
+    @Autowired
+    RSA rsa;
+
+    public CreateOptions<String, String> options3 = CreateOptions.<String, String>builder()
+            .on(CreateOptions.DataType.JSON)
+            .prefixes("user:")
+            .build();
+
+    @PostMapping("/newUser")
+    public ResponseEntity<Map<String, Object>> newUser(@RequestBody UserAuth user) {
+
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+        try {
+            commands.ftCreate("uidx",options3, Field.text("$.id").as("id").sortable(true).build(),
+                    Field.text("$.username").as("username").build());
+        } catch (Exception e) {
+            System.out.println(e.getClass().getName());
+            System.out.println("already exists index");
+        }
+
+        try {
+            String decrptedPass = rsa.decrypt(user.getPassword());
+
+            PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+            String ecrypedPassword = passwordEncoder.encode(decrptedPass);
+            System.out.println("encoded password --> " + ecrypedPassword);
+
+            user.setPassword(ecrypedPassword);
+            System.out.println(user.getPassword());
+            
+            String id = user.getId();
+            String jsonBody = new ObjectMapper().writeValueAsString(user);
+            String set = commands.jsonSet("user:" + id, "$", jsonBody);
+            System.out.println(set);
+        } catch (Exception e) {
+            e.printStackTrace();
+            map.put("message", "could not create in redis");
+            map.put("code", HttpStatus.BAD_REQUEST.value());
+            result = new ResponseEntity<Map<String, Object>>(map,
+                    HttpStatus.BAD_REQUEST);
+            return result;
+
+        }
+
+        map.put("message", "done");
+        map.put("created", user);
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
+
+    }
+
+    @PostMapping("/loginUser")
+    public Map<String, String> login(@RequestBody Map<String, String> loginRequest) {
+
+        //JwtUtil jwtUtil = new JwtUtil();
+        Map<String , String> tokens = new HashMap<>();
+        String decrptedPass;
+        try {
+            decrptedPass = rsa.decrypt(loginRequest.get("password"));
+            UsernamePasswordAuthenticationToken unauthenticatedObject = new UsernamePasswordAuthenticationToken(
+                loginRequest.get("username"), decrptedPass);
 
         System.out.println("check unauthenticatedObject before auth ----> " + unauthenticatedObject);
         Authentication authenticate = authenticationManager
                 .authenticate(unauthenticatedObject);
         System.out.println("authenticate -->  : " + authenticate);
         User user = (User) authenticate.getPrincipal();
-        String token = jwtUtil.generateToken(user.getUsername());
-        return token;
-        
+        String accessToken = jwtUtil.generateAccessToken(user.getUsername());
+        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername());
+        tokens.put("accessToken" , accessToken);
+        tokens.put("refreshToken" , refreshToken);
+        return tokens;
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.out.println("\n\nfailed\n\n");
+            return null;
+        } 
+
     }
+
+    @PostMapping("/refreshToken")
+    public String refreshToken(HttpServletResponse response, HttpServletRequest request) {
+        
+        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        String refreshToken = null;
+        String username = null;
+        String accessToken = null;
+        //System.out.println("checking authhead in refresh token : " + authHeader);
+
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            refreshToken = authHeader.substring(7);
+            //System.out.println("refresh token reached here --> " + refreshToken);
+            Boolean valid = jwtUtil.validateToken(refreshToken);
+            System.out.println("validity --> " + valid);
+            if (valid == false) {
+                System.out.println("\nrefresh token is expired . login again\n");
+            }
+            else {
+                username = jwtUtil.extractUsername(refreshToken);
+                System.out.println("username in refreshtoken : " + username);
+            }
+        }
+        if (username != null) {
+            accessToken = jwtUtil.generateAccessToken(username);
+            System.out.println("\nsuccess refresh token\n");
+            return accessToken;
+        }
+        System.out.println("failed");
+        return null;
+    }
+    
 
     @Tag(name = "Ext Get", description = "GET methods of External Api to get electronics info")
     @GetMapping("/checkListAll")
@@ -200,7 +293,6 @@ public class Controller {
                 String set = commands.jsonSet("external:" + id, "$", jsonBody);
                 System.out.println(set);
             } catch (JsonProcessingException e) {
-                // TODO Auto-generated catch block
                 e.printStackTrace();
             }
 
