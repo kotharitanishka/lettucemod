@@ -12,6 +12,7 @@ import java.util.Map;
 
 import com.example.lettucemoddemo.controller.Controller;
 import com.example.lettucemoddemo.model.Person;
+import com.example.lettucemoddemo.model.UserAuth;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 @WebMvcTest(controllers = Controller.class)
@@ -21,6 +22,24 @@ public class integrationTest {
        private MockMvc mockMvc;
 
        Person p;
+
+       @Test
+       public void testApiNewUser() throws Exception {
+
+              String encryptedRSAPass = "Xgh8L7Aizhc5FiW/8hYYzQ3Lui2Y4dbpf2NyhtqZltGxePlJn9fyuJDovLR5hW0ANzXksxNAaJ51WIcEUz7YFtklb6T5V8FbBAHBOvsjudu/Dws0OPLv1wdU4lxTQNwBrf4HIvYysTQLMYFkUnyuPdKWjoq2hz8Uquik+BBsymNwXouUGhaRnM/0Faq54Dd6Pvz8ckC2BBgoXKxBg/Zf6INdq4P+eIYch5Rs9vmpSI1TMptxqmzPRRRB60ne94Bu++pCAUIab6zdiXu05ZSNCv2iQ5Bz36+YHJc+On/YSYVwKS1VxSsL9b73x6m43DAvpezVw966FERZ/oSESpcr5w==";
+              String decryptedRSAPass = "user@123";
+              String bcryptEncodedPass = "$2a$10$en1nRzt42zZtodFgu9upvuUMo8C97ocabWRypcPFIW8DzcfzEOAg2";
+              String username = "bhavik";
+              UserAuth user1 = new UserAuth();
+              user1.setId("8");
+              user1.setUsername(username);
+              user1.setPassword(encryptedRSAPass);
+              user1.setAuthority("USER");
+              String userString = new ObjectMapper().writeValueAsString(user1);
+              mockMvc.perform(post("/newUser")
+                            .contentType("application/json")
+                            .content(userString)).andExpect(status().isOk());
+       }
 
        @Test
        public void testApiGetByName() throws Exception {

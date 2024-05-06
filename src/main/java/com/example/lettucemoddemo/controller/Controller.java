@@ -19,6 +19,7 @@ import com.redis.lettucemod.search.Document;
 import com.redis.lettucemod.search.Field;
 import com.redis.lettucemod.search.SearchOptions;
 import com.redis.lettucemod.search.SearchResults;
+import com.redis.lettucemod.search.TagField;
 import com.redis.lettucemod.search.SearchOptions.SortBy;
 
 import io.lettuce.core.RedisURI;
@@ -95,6 +96,9 @@ public class Controller {
     @Autowired
     RSA rsa;
 
+    @Autowired
+    PasswordEncoder passwordEncoder;
+
     public CreateOptions<String, String> options3 = CreateOptions.<String, String>builder()
             .on(CreateOptions.DataType.JSON)
             .prefixes("user:")
@@ -107,7 +111,7 @@ public class Controller {
         Map<String, Object> map = new LinkedHashMap<String, Object>();
 
         try {
-            commands.ftCreate("uidx",options3, Field.text("$.id").as("id").sortable(true).build(),
+            commands.ftCreate("uidx", options3, Field.text("$.id").as("id").sortable(true).build(),
                     Field.text("$.username").as("username").build());
         } catch (Exception e) {
             System.out.println(e.getClass().getName());
@@ -116,14 +120,13 @@ public class Controller {
 
         try {
             String decrptedPass = rsa.decrypt(user.getPassword());
-
-            PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+            //PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
             String ecrypedPassword = passwordEncoder.encode(decrptedPass);
             System.out.println("encoded password --> " + ecrypedPassword);
 
             user.setPassword(ecrypedPassword);
             System.out.println(user.getPassword());
-            
+
             String id = user.getId();
             String jsonBody = new ObjectMapper().writeValueAsString(user);
             String set = commands.jsonSet("user:" + id, "$", jsonBody);
@@ -149,50 +152,49 @@ public class Controller {
     @PostMapping("/loginUser")
     public Map<String, String> login(@RequestBody Map<String, String> loginRequest) {
 
-        //JwtUtil jwtUtil = new JwtUtil();
-        Map<String , String> tokens = new HashMap<>();
+        // JwtUtil jwtUtil = new JwtUtil();
+        Map<String, String> tokens = new HashMap<>();
         String decrptedPass;
         try {
             decrptedPass = rsa.decrypt(loginRequest.get("password"));
             UsernamePasswordAuthenticationToken unauthenticatedObject = new UsernamePasswordAuthenticationToken(
-                loginRequest.get("username"), decrptedPass);
+                    loginRequest.get("username"), decrptedPass);
 
-        System.out.println("check unauthenticatedObject before auth ----> " + unauthenticatedObject);
-        Authentication authenticate = authenticationManager
-                .authenticate(unauthenticatedObject);
-        System.out.println("authenticate -->  : " + authenticate);
-        User user = (User) authenticate.getPrincipal();
-        String accessToken = jwtUtil.generateAccessToken(user.getUsername());
-        String refreshToken = jwtUtil.generateRefreshToken(user.getUsername());
-        tokens.put("accessToken" , accessToken);
-        tokens.put("refreshToken" , refreshToken);
-        return tokens;
+            System.out.println("check unauthenticatedObject before auth ----> " + unauthenticatedObject);
+            Authentication authenticate = authenticationManager
+                    .authenticate(unauthenticatedObject);
+            System.out.println("authenticate -->  : " + authenticate);
+            User user = (User) authenticate.getPrincipal();
+            String accessToken = jwtUtil.generateAccessToken(user.getUsername());
+            String refreshToken = jwtUtil.generateRefreshToken(user.getUsername());
+            tokens.put("accessToken", accessToken);
+            tokens.put("refreshToken", refreshToken);
+            return tokens;
         } catch (Exception e) {
             e.printStackTrace();
             System.out.println("\n\nfailed\n\n");
             return null;
-        } 
+        }
 
     }
 
     @PostMapping("/refreshToken")
     public String refreshToken(HttpServletResponse response, HttpServletRequest request) {
-        
+
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
         String refreshToken = null;
         String username = null;
         String accessToken = null;
-        //System.out.println("checking authhead in refresh token : " + authHeader);
+        // System.out.println("checking authhead in refresh token : " + authHeader);
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             refreshToken = authHeader.substring(7);
-            //System.out.println("refresh token reached here --> " + refreshToken);
+            // System.out.println("refresh token reached here --> " + refreshToken);
             Boolean valid = jwtUtil.validateToken(refreshToken);
             System.out.println("validity --> " + valid);
             if (valid == false) {
                 System.out.println("\nrefresh token is expired . login again\n");
-            }
-            else {
+            } else {
                 username = jwtUtil.extractUsername(refreshToken);
                 System.out.println("username in refreshtoken : " + username);
             }
@@ -205,7 +207,6 @@ public class Controller {
         System.out.println("failed");
         return null;
     }
-    
 
     @Tag(name = "Ext Get", description = "GET methods of External Api to get electronics info")
     @GetMapping("/checkListAll")
@@ -452,7 +453,6 @@ public class Controller {
             return result;
         }
         try {
-
             commands.ftCreate("pidx", options0, Field.text("$.id").as("id").sortable(true).build(),
                     Field.text("$.name").as("name").build(), Field.numeric("$.age").as("age").build(),
                     Field.tag("$.active0").as("active0").build());
