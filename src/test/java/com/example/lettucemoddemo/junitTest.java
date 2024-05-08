@@ -9,12 +9,16 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.security.InvalidKeyException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 
 import org.assertj.core.util.Arrays;
 import org.junit.jupiter.api.Test;
@@ -28,6 +32,7 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -91,30 +96,29 @@ public class junitTest {
     user1.setAuthority("USER");
 
     // case 1 : working
-    String jsonBody = new ObjectMapper().writeValueAsString(user1);
     // set up mock behavior
     when(rsa.decrypt(user1.getPassword())).thenReturn(decryptedRSAPass);
     when(passwordEncoder.encode(decryptedRSAPass)).thenReturn(bcryptEncodedPass);
-    when(commands.jsonSet("user:" + user1.getId(), "$", jsonBody)).thenReturn("OK");
+    // user1.setPassword(bcryptEncodedPass);
+    String jsonBody = new ObjectMapper().writeValueAsString(user1);
+    when(commands.jsonSet(eq("user:" + user1.getId()), eq("$"), any())).thenReturn("OK");
     // call method using mock object
     ResponseEntity<Map<String, Object>> result1 = controller.newUser(user1);
-    System.out.println(result1);
-    // verify that mock behavior was called
-    //verify(commands).jsonSet("user:" + user1.getId(), "$", jsonBody);
+    System.out.println("result is -->" + result1);
+    System.out.println("My json body is -->" + jsonBody);
+
     // check result
     assertEquals("done", result1.getBody().get("message"));
 
-     // case 0 :catch ft create
+    // case 0 :catch ft create
+    user1.setPassword(encryptedRSAPass);
     // set up mock behavior
     when(commands.ftCreate("uidx", controller.options3, Field.text("$.id").as("id").sortable(true).build(),
-    Field.text("$.username").as("username").build()))
+        Field.text("$.username").as("username").build()))
         .thenThrow(new RedisCommandExecutionException("catch"));
 
-    when(rsa.decrypt(user1.getPassword())).thenReturn(decryptedRSAPass);
-    when(passwordEncoder.encode(decryptedRSAPass)).thenReturn(bcryptEncodedPass);
-    
-    when(commands.jsonSet(eq("user:" + user1.getId()) , eq("$"), anyString()))
-        .thenThrow(new RedisCommandExecutionException("catch"));
+    when(rsa.decrypt(encryptedRSAPass)).thenThrow(new InvalidKeyException("catch"));
+
     // call method using mock object
     ResponseEntity<Map<String, Object>> result0 = controller.newUser(user1);
     System.out.println(result0);
@@ -122,13 +126,11 @@ public class junitTest {
 
   }
 
-
   @Test
   public void testApiLoginUser() throws Exception {
 
     String encryptedRSAPass = "Xgh8L7Aizhc5FiW/8hYYzQ3Lui2Y4dbpf2NyhtqZltGxePlJn9fyuJDovLR5hW0ANzXksxNAaJ51WIcEUz7YFtklb6T5V8FbBAHBOvsjudu/Dws0OPLv1wdU4lxTQNwBrf4HIvYysTQLMYFkUnyuPdKWjoq2hz8Uquik+BBsymNwXouUGhaRnM/0Faq54Dd6Pvz8ckC2BBgoXKxBg/Zf6INdq4P+eIYch5Rs9vmpSI1TMptxqmzPRRRB60ne94Bu++pCAUIab6zdiXu05ZSNCv2iQ5Bz36+YHJc+On/YSYVwKS1VxSsL9b73x6m43DAvpezVw966FERZ/oSESpcr5w==";
     String decryptedRSAPass = "user@123";
-    String bcryptEncodedPass = "$2a$10$en1nRzt42zZtodFgu9upvuUMo8C97ocabWRypcPFIW8DzcfzEOAg2";
     String username = "umesh";
 
     UserAuth user1 = new UserAuth();
@@ -149,122 +151,189 @@ public class junitTest {
     // case 1 : working
     // set up mock behavior
     when(rsa.decrypt(user1.getPassword())).thenReturn(decryptedRSAPass);
-    verify(rsa).decrypt(user1.getPassword());
+    // verify(rsa).decrypt(user1.getPassword());
 
     when(authenticationManager.authenticate(any())).thenReturn(authenticate);
     when(authenticate.getPrincipal()).thenReturn(user);
-    when(jwtUtil.generateAccessToken("umesh")).thenReturn("abc");
-    //verify(authenticationManager).authenticate(any());
-    Map<String, String> result1 = controller.login(loginCred);
+    when(user.getUsername()).thenReturn(username);
+    when(jwtUtil.generateAccessToken(user.getUsername())).thenReturn(accessToken);
+    when(jwtUtil.generateRefreshToken(user.getUsername())).thenReturn(refreshToken);
+    // verify(jwtUtil).generateAccessToken("umesh");
+    ResponseEntity<Map<String, Object>> result1 = controller.login(loginCred);
 
     System.out.println(result1);
-    
+
+    assertEquals(accessToken, result1.getBody().get("accessToken"));
+
+    // case 0 : catch
+    // set up mock behavior
+    when(rsa.decrypt(user1.getPassword())).thenThrow(new InvalidKeyException("catch"));
+    verify(rsa, times(2)).decrypt(user1.getPassword());
+
+    ResponseEntity<Map<String, Object>> result0 = controller.login(loginCred);
+
+    System.out.println(result0);
+
+    assertEquals("cannot login", result0.getBody().get("failed"));
 
   }
 
-  // @Test
-  // public void testApiGetByName() throws Exception {
+  @Test
+  public void testApiRefreshToken() throws Exception {
 
-  //   Person person1 = new Person();
-  //   person1.setId("1000");
-  //   person1.setName("tk");
-  //   person1.setAge(22);
-  //   person1.setactive0(true);
+    String authHeader = "Bearer abccidsvo";
+    String refreshToken = "abccidsvo";
+    String accessToken = "acsoiginfg";
+    String username = "umesh";
 
-  //   Person person2 = new Person();
-  //   person2.setId("1001");
-  //   person2.setName("tk");
-  //   person2.setAge(25);
-  //   person2.setactive0(true);
+    HttpServletRequest request = mock(HttpServletRequest.class);
+    HttpServletResponse response = mock(HttpServletResponse.class);
 
-  //   String jsonPerson1 = new ObjectMapper().writeValueAsString(person1);
-  //   String jsonPerson2 = new ObjectMapper().writeValueAsString(person2);
+    // case 2 : failed --> authheader is null
+    String authHeader1 = null;
+    when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn(authHeader1);
 
-  //   when(connection.sync()).thenReturn(commands);
+    ResponseEntity<Map<String, Object>> result2 = controller.refreshToken(response, request);
+    System.out.println("the result is --->" + result2);
 
-  //   // case 0 : name does not exist --> searchresults null
-  //   String query0;
-  //   String name0 = "xyz";
-  //   query0 = "(@name:" + name0 + " & @active0:{true})";
-  //   // set up mock behavior
-  //   when(commands.ftSearch("pidx", query0, controller.options2)).thenReturn(null);
-  //   // call method using mock object
-  //   ResponseEntity<Map<String, Object>> result0 = controller.getPersonByName("xyz");
-  //   System.out.println(result0);
-  //   // verify that mock behavior was called
-  //   verify(commands).ftSearch("pidx", query0, controller.options2);
-  //   // check result
-  //   assertEquals(400, result0.getBody().get("code"));
+    assertEquals("refresh token not valid", result2.getBody().get("failed"));
 
-  //   // case 1 : name does not exist --> searchresults empty
-  //   String query1;
-  //   String name1 = "abc";
-  //   query1 = "(@name:" + name1 + " & @active0:{true})";
-  //   SearchResults<String, String> searchResults1 = new SearchResults<>();
-  //   // set up mock behavior
-  //   when(commands.ftSearch("pidx", query1, controller.options2)).thenReturn(searchResults1);
-  //   // call method using mock object
-  //   ResponseEntity<Map<String, Object>> result1 = controller.getPersonByName("abc");
-  //   System.out.println(result1);
-  //   // verify that mock behavior was called
-  //   verify(commands).ftSearch("pidx", query1, controller.options2);
-  //   // check result
-  //   assertEquals(400, result1.getBody().get("code"));
+    // case 3 : failed --> authheader is not start with bearer
+    String authHeader2 = "ancdsfni";
+    when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn(authHeader2);
 
-  //   // case 3 : catch
-  //   String query3;
-  //   String name3 = "pqr";
-  //   query3 = "(@name:" + name3 + " & @active0:{true})";
-  //   SearchResults<String, String> searchResults3 = new SearchResults<>();
-  //   Document<String , String> document3 = new Document<String , String>();
-  //   document3.put("id", "1000");
-  //   document3.put("$", "testing");
+    ResponseEntity<Map<String, Object>> result3 = controller.refreshToken(response, request);
+    System.out.println("the result is --->" + result3);
 
-  //   searchResults3.add(document3);
-  //   // set up mock behavior
-  //   when(commands.ftSearch("pidx", query3, controller.options2)).thenReturn(searchResults3);
-  //   // call method using mock object
-  //   ResponseEntity<Map<String, Object>> result3 = controller.getPersonByName("pqr");
-  //   System.out.println(result3);
-  //   // verify that mock behavior was called
-  //   verify(commands).ftSearch("pidx", query3, controller.options2);
-  //   // check result
-  //   assertEquals(400, result1.getBody().get("code"));
+    assertEquals("refresh token not valid", result3.getBody().get("failed"));
 
-  //   // case 4: name exist
-  //   String query2;
-  //   String name2 = "tk";
-  //   query2 = "(@name:" + name2 + " & @active0:{true})";
-  //   SearchResults<String, String> searchResults2 = new SearchResults<String, String>();
+    // case 4 : failed --> refresh token validity false
+    String authHeader3 = "Bearer dvjsdnvjs";
+    when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn(authHeader3);
+    when(jwtUtil.validateToken(refreshToken)).thenReturn(false);
 
-  //   // searchResults2 = personlist;
-  //   Document<String , String> document1 = new Document<String , String>();
-  //   document1.put("id", "1000");
-  //   document1.put("$", jsonPerson1);
+    ResponseEntity<Map<String, Object>> result4 = controller.refreshToken(response, request);
+    System.out.println("the result is --->" + result4);
 
-  //   Document<String , String> document2 = new Document<String , String>();
-  //   document2.put("id", "1001");
-  //   document2.put("$", jsonPerson2);
+    assertEquals("refresh token not valid", result4.getBody().get("failed"));
 
-  //   searchResults2.add(document1);
-  //   searchResults2.add(document2);
+    // case 0 : working
+    when(request.getHeader(HttpHeaders.AUTHORIZATION)).thenReturn(authHeader);
+    when(jwtUtil.validateToken(refreshToken)).thenReturn(true);
+    when(jwtUtil.extractUsername(refreshToken)).thenReturn(username);
+    when(jwtUtil.generateAccessToken(username)).thenReturn(accessToken);
 
-  //   // set up mock behavior
-  //   when(commands.ftSearch("pidx", query2, controller.options2)).thenReturn(searchResults2);
-  //   // call method using mock object
-  //   ResponseEntity<Map<String, Object>> result2 = controller.getPersonByName("tk");
-  //   System.out.println(result2);
+    ResponseEntity<Map<String, Object>> result1 = controller.refreshToken(response, request);
+    System.out.println("the result is --->" + result1);
 
-  //   List<Object> personList = new ArrayList<Object>();
-  //   personList = Arrays.asList(result2.getBody().get("data"));
-  //   System.out.println(personList.get(0).getClass());
+    assertEquals(accessToken, result1.getBody().get("accessToken"));
 
-  //   // verify that mock behavior was called
-  //   verify(commands).ftSearch("pidx", query2, controller.options2);
-  //   // check result
-  //   assertEquals("OK", result2.getBody().get("success"));
+  }
 
-  // }
+  @Test
+  public void testApiGetByName() throws Exception {
+
+    Person person1 = new Person();
+    person1.setId("1000");
+    person1.setName("tk");
+    person1.setAge(22);
+    person1.setactive0(true);
+
+    Person person2 = new Person();
+    person2.setId("1001");
+    person2.setName("tk");
+    person2.setAge(25);
+    person2.setactive0(true);
+
+    String jsonPerson1 = new ObjectMapper().writeValueAsString(person1);
+    String jsonPerson2 = new ObjectMapper().writeValueAsString(person2);
+
+    when(connection.sync()).thenReturn(commands);
+
+    // case 0 : name does not exist --> searchresults null
+    String query0;
+    String name0 = "xyz";
+    query0 = "(@name:" + name0 + " & @active0:{true})";
+    // set up mock behavior
+    when(commands.ftSearch("pidx", query0, controller.options2)).thenReturn(null);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result0 = controller.getPersonByName("xyz");
+    System.out.println(result0);
+    // verify that mock behavior was called
+    verify(commands).ftSearch("pidx", query0, controller.options2);
+    // check result
+    assertEquals(400, result0.getBody().get("code"));
+
+    // case 1 : name does not exist --> searchresults empty
+    String query1;
+    String name1 = "abc";
+    query1 = "(@name:" + name1 + " & @active0:{true})";
+    SearchResults<String, String> searchResults1 = new SearchResults<>();
+    // set up mock behavior
+    when(commands.ftSearch("pidx", query1, controller.options2)).thenReturn(searchResults1);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result1 = controller.getPersonByName("abc");
+    System.out.println(result1);
+    // verify that mock behavior was called
+    verify(commands).ftSearch("pidx", query1, controller.options2);
+    // check result
+    assertEquals(400, result1.getBody().get("code"));
+
+    // case 3 : catch
+    String query3;
+    String name3 = "pqr";
+    query3 = "(@name:" + name3 + " & @active0:{true})";
+    SearchResults<String, String> searchResults3 = new SearchResults<>();
+    Document<String, String> document3 = new Document<String, String>();
+    document3.put("id", "1000");
+    document3.put("$", "testing");
+
+    searchResults3.add(document3);
+    // set up mock behavior
+    when(commands.ftSearch("pidx", query3, controller.options2)).thenReturn(searchResults3);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result3 = controller.getPersonByName("pqr");
+    System.out.println(result3);
+    // verify that mock behavior was called
+    verify(commands).ftSearch("pidx", query3, controller.options2);
+    // check result
+    assertEquals(400, result1.getBody().get("code"));
+
+    // case 4: name exist
+    String query2;
+    String name2 = "tk";
+    query2 = "(@name:" + name2 + " & @active0:{true})";
+    SearchResults<String, String> searchResults2 = new SearchResults<String, String>();
+
+    // searchResults2 = personlist;
+    Document<String, String> document1 = new Document<String, String>();
+    document1.put("id", "1000");
+    document1.put("$", jsonPerson1);
+
+    Document<String, String> document2 = new Document<String, String>();
+    document2.put("id", "1001");
+    document2.put("$", jsonPerson2);
+
+    searchResults2.add(document1);
+    searchResults2.add(document2);
+
+    // set up mock behavior
+    when(commands.ftSearch("pidx", query2, controller.options2)).thenReturn(searchResults2);
+    // call method using mock object
+    ResponseEntity<Map<String, Object>> result2 = controller.getPersonByName("tk");
+    System.out.println(result2);
+
+    List<Object> personList = new ArrayList<Object>();
+    System.out.println("result 2 -->" + result2.getBody().get("data"));
+    // personList = Arrays.asList(result2.getBody().get("data"));
+    // System.out.println("clas ==> "+personList.get(0).getClass());
+
+    // verify that mock behavior was called
+    verify(commands).ftSearch("pidx", query2, controller.options2);
+    // check result
+    assertEquals("OK", result2.getBody().get("success"));
+
+  }
 
   @Test
   public void testApiDeleteById() throws Exception {
@@ -446,7 +515,7 @@ public class junitTest {
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
     String time = timestamp.toString();
     person3.setcreatedOn0(time);
-    //String jsonPerson1 = new ObjectMapper().writeValueAsString(person3);
+    // String jsonPerson1 = new ObjectMapper().writeValueAsString(person3);
     // set up mock behavior
     when(commands.jsonSet(eq(key2), eq("$"), anyString(), eq(SetMode.NX))).thenReturn("OK");
     // call method using mock object
@@ -506,8 +575,7 @@ public class junitTest {
     assertEquals("enter relevant id",
         result00.getBody().get("message"));
 
-
-    // case 1 :  already deleted
+    // case 1 : already deleted
     String personKey1 = "People:8000:0";
     // set up mock behavior
     when(commands.jsonGet(personKey1, "$")).thenReturn(null);
@@ -543,12 +611,12 @@ public class junitTest {
     ResponseEntity<Map<String, Object>> result2 = controller.updatePersonById("5000", "user2", map);
     System.out.println(result2);
     // verify that mock behavior was called
-    verify(commands , times(3)).jsonGet(personKey2, "$");
+    verify(commands, times(3)).jsonGet(personKey2, "$");
     // check result
     assertEquals("enter relevant data to update",
         result2.getBody().get("message"));
 
-    // case 2.1 : delta null 
+    // case 2.1 : delta null
     String personKey4 = "People:5000:0";
     String jsonPerson4 = new ObjectMapper().writeValueAsString(personList1);
     // set up mock behavior
@@ -557,7 +625,7 @@ public class junitTest {
     ResponseEntity<Map<String, Object>> result4 = controller.updatePersonById("5000", "user2", null);
     System.out.println(result4);
     // verify that mock behavior was called
-    verify(commands , times(4)).jsonGet(personKey4, "$");
+    verify(commands, times(4)).jsonGet(personKey4, "$");
     // check result
     assertEquals("enter relevant data to update",
         result2.getBody().get("message"));
@@ -577,7 +645,7 @@ public class junitTest {
     map.put("age", 20);
     map.put("ps5", "fifa24");
 
-    //String jsonMap = new ObjectMapper().writeValueAsString(map);
+    // String jsonMap = new ObjectMapper().writeValueAsString(map);
 
     Map<String, Object> delta = new LinkedHashMap<String, Object>();
     delta.put("data", map);
@@ -619,11 +687,12 @@ public class junitTest {
     when(connection.sync()).thenReturn(commands);
 
     // case 0 : get all empty list
-    // SearchOptions<String, String> options0 = SearchOptions.<String, String>builder()
-    //     .limit(0, 5)
-    //     .returnFields("name")
-    //     .sortBy(SortBy.asc("id"))
-    //     .build();
+    // SearchOptions<String, String> options0 = SearchOptions.<String,
+    // String>builder()
+    // .limit(0, 5)
+    // .returnFields("name")
+    // .sortBy(SortBy.asc("id"))
+    // .build();
 
     SearchResults<String, String> searchResults0 = new SearchResults<>();
     // set up mock behavior
@@ -637,11 +706,12 @@ public class junitTest {
     assertEquals(400, result0.getBody().get("code"));
 
     // case 1 : get all empty list
-    // SearchOptions<String, String> options1 = SearchOptions.<String, String>builder()
-    //     .limit(0, 5)
-    //     .returnFields("name")
-    //     .sortBy(SortBy.asc("id"))
-    //     .build();
+    // SearchOptions<String, String> options1 = SearchOptions.<String,
+    // String>builder()
+    // .limit(0, 5)
+    // .returnFields("name")
+    // .sortBy(SortBy.asc("id"))
+    // .build();
 
     // set up mock behavior
     when(commands.ftSearch(eq("pidx"), eq("@active0:{true}"), any())).thenReturn(null);
@@ -672,20 +742,21 @@ public class junitTest {
     person3.setactive0(false);
 
     // case 2 : active only , no limit , no offset
-    // SearchOptions<String, String> options2 = SearchOptions.<String, String>builder()
-    //     .limit(0, 5)
-    //     .returnFields("name")
-    //     .sortBy(SortBy.asc("id"))
-    //     .build();
+    // SearchOptions<String, String> options2 = SearchOptions.<String,
+    // String>builder()
+    // .limit(0, 5)
+    // .returnFields("name")
+    // .sortBy(SortBy.asc("id"))
+    // .build();
 
     SearchResults<String, String> searchResults1 = new SearchResults<>();
 
     // searchResults1 = personlist;
-    Document<String , String> document1 = new Document<String , String>();
+    Document<String, String> document1 = new Document<String, String>();
     document1.put("name", person1.getName());
     document1.setId("People:1000:0");
 
-    Document<String , String> document2 = new Document<String , String>();
+    Document<String, String> document2 = new Document<String, String>();
     document2.put("name", person2.getName());
     document2.setId("People:1001:0");
 
@@ -707,7 +778,7 @@ public class junitTest {
     // inact true
     SearchResults<String, String> searchResults2 = new SearchResults<>();
 
-    Document<String , String> document3 = new Document<String , String>();
+    Document<String, String> document3 = new Document<String, String>();
     document3.put("name", person3.getName());
     document3.setId("People:5000:0");
 
@@ -715,11 +786,12 @@ public class junitTest {
     searchResults2.add(document2);
     searchResults2.add(document3);
 
-    // SearchOptions<String, String> options3 = SearchOptions.<String, String>builder()
-    //     .limit(0, 5)
-    //     .returnFields("name")
-    //     .sortBy(SortBy.asc("id"))
-    //     .build();
+    // SearchOptions<String, String> options3 = SearchOptions.<String,
+    // String>builder()
+    // .limit(0, 5)
+    // .returnFields("name")
+    // .sortBy(SortBy.asc("id"))
+    // .build();
 
     // set up mock behavior
     when(commands.ftSearch(eq("pidx"), eq("*"), any())).thenReturn(searchResults2);
@@ -735,18 +807,19 @@ public class junitTest {
     // limit = 1, offset = 1
     SearchResults<String, String> searchResults3 = new SearchResults<>();
 
-    Document<String , String> document4 = new Document<String , String>();
+    Document<String, String> document4 = new Document<String, String>();
     document4.put("name", person3.getName());
     document4.setId("People:5000:0");
 
     searchResults3.add(document2);
     searchResults3.setCount(3);
 
-    // SearchOptions<String, String> options4 = SearchOptions.<String, String>builder()
-    //     .limit(1, 1)
-    //     .returnFields("name")
-    //     .sortBy(SortBy.asc("id"))
-    //     .build();
+    // SearchOptions<String, String> options4 = SearchOptions.<String,
+    // String>builder()
+    // .limit(1, 1)
+    // .returnFields("name")
+    // .sortBy(SortBy.asc("id"))
+    // .build();
 
     // set up mock behavior
     when(commands.ftSearch(eq("pidx"), eq("*"), any())).thenReturn(searchResults3);
@@ -943,7 +1016,6 @@ public class junitTest {
     // check result
     assertEquals("tanishka", checkPerson.getName());
 
-
     // case 7: min 3 AND max null
     String personKey12 = "People:1000:0";
     String personKey13 = "People:1000:1";
@@ -967,7 +1039,6 @@ public class junitTest {
     verify(commands, times(6)).jsonGet(personKey5, "$");
     // check result
     assertEquals(24, checkPerson.getAge());
-
 
     // case 6: id deleted (inactive)
     String personKey9 = "People:5000:0";

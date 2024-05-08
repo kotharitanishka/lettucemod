@@ -99,6 +99,11 @@ public class Controller {
     @Autowired
     PasswordEncoder passwordEncoder;
 
+    @GetMapping("/checkIntegration")
+    public String checkIntegration() {
+        return "Hi working integration testing";
+    }
+
     public CreateOptions<String, String> options3 = CreateOptions.<String, String>builder()
             .on(CreateOptions.DataType.JSON)
             .prefixes("user:")
@@ -111,28 +116,32 @@ public class Controller {
         Map<String, Object> map = new LinkedHashMap<String, Object>();
 
         try {
-            commands.ftCreate("uidx", options3, Field.text("$.id").as("id").sortable(true).build(),
+            String create = commands.ftCreate("uidx", options3, Field.text("$.id").as("id").sortable(true).build(),
                     Field.text("$.username").as("username").build());
+            System.out.println(create);
         } catch (Exception e) {
-            System.out.println(e.getClass().getName());
+            // System.out.println(e.getClass().getName());
             System.out.println("already exists index");
         }
 
         try {
             String decrptedPass = rsa.decrypt(user.getPassword());
-            //PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+            System.out.println("decryptedPass --> " + decrptedPass);
+            // PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
             String ecrypedPassword = passwordEncoder.encode(decrptedPass);
             System.out.println("encoded password --> " + ecrypedPassword);
 
             user.setPassword(ecrypedPassword);
-            System.out.println(user.getPassword());
+            System.out.println("users pass is -->" + user.getPassword());
 
             String id = user.getId();
+            System.out.println("id is --> " + id);
             String jsonBody = new ObjectMapper().writeValueAsString(user);
+            System.out.println("Json body is -->" + jsonBody);
             String set = commands.jsonSet("user:" + id, "$", jsonBody);
-            System.out.println(set);
+            System.out.println("jsonset is -->" + set);
         } catch (Exception e) {
-            e.printStackTrace();
+            // e.printStackTrace();
             map.put("message", "could not create in redis");
             map.put("code", HttpStatus.BAD_REQUEST.value());
             result = new ResponseEntity<Map<String, Object>>(map,
@@ -150,10 +159,11 @@ public class Controller {
     }
 
     @PostMapping("/loginUser")
-    public Map<String, String> login(@RequestBody Map<String, String> loginRequest) {
+    public ResponseEntity<Map<String, Object>> login(@RequestBody Map<String, String> loginRequest) {
 
         // JwtUtil jwtUtil = new JwtUtil();
-        Map<String, String> tokens = new HashMap<>();
+        Map<String, Object> tokens = new LinkedHashMap<String, Object>();
+        ResponseEntity<Map<String, Object>> result;
         String decrptedPass;
         try {
             decrptedPass = rsa.decrypt(loginRequest.get("password"));
@@ -165,23 +175,37 @@ public class Controller {
                     .authenticate(unauthenticatedObject);
             System.out.println("authenticate -->  : " + authenticate);
             User user = (User) authenticate.getPrincipal();
+            System.out.println("this is user -->" + user);
+            System.out.println("this is username --> " + user.getUsername());
             String accessToken = jwtUtil.generateAccessToken(user.getUsername());
             String refreshToken = jwtUtil.generateRefreshToken(user.getUsername());
+            // System.out.println("\naccess token in controller is --> " + accessToken);
+            tokens.put("code", HttpStatus.OK.value());
             tokens.put("accessToken", accessToken);
             tokens.put("refreshToken", refreshToken);
-            return tokens;
+            result = new ResponseEntity<Map<String, Object>>(tokens,
+                    HttpStatus.OK);
+            return result;
         } catch (Exception e) {
-            e.printStackTrace();
+            // e.printStackTrace();
+            tokens.put("code", HttpStatus.BAD_REQUEST.value());
+            tokens.put("failed", "cannot login");
+            result = new ResponseEntity<Map<String, Object>>(tokens,
+                    HttpStatus.BAD_REQUEST);
             System.out.println("\n\nfailed\n\n");
-            return null;
+            return result;
         }
 
     }
 
     @PostMapping("/refreshToken")
-    public String refreshToken(HttpServletResponse response, HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> refreshToken(HttpServletResponse response, HttpServletRequest request) {
+
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
+        ResponseEntity<Map<String, Object>> result;
 
         String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
+        System.out.println("authheader in controller is --> " + authHeader);
         String refreshToken = null;
         String username = null;
         String accessToken = null;
@@ -189,7 +213,7 @@ public class Controller {
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             refreshToken = authHeader.substring(7);
-            // System.out.println("refresh token reached here --> " + refreshToken);
+            System.out.println("refresh token reached here --> " + refreshToken);
             Boolean valid = jwtUtil.validateToken(refreshToken);
             System.out.println("validity --> " + valid);
             if (valid == false) {
@@ -202,205 +226,234 @@ public class Controller {
         if (username != null) {
             accessToken = jwtUtil.generateAccessToken(username);
             System.out.println("\nsuccess refresh token\n");
-            return accessToken;
-        }
-        System.out.println("failed");
-        return null;
-    }
-
-    @Tag(name = "Ext Get", description = "GET methods of External Api to get electronics info")
-    @GetMapping("/checkListAll")
-    public ResponseEntity<Map<String, Object>> checkAPIListAll() {
-
-        ResponseEntity<Map<String, Object>> result;
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
-
-        WebClient.ResponseSpec responseSpec = client3.get()
-                .uri("https://api.restful-api.dev/objects")
-                .retrieve();
-
-        List<Map<String, Object>> responseBody = responseSpec.bodyToMono(List.class).block();
-
-        map.put("data", responseBody);
-        map.put("code", HttpStatus.OK.value());
-        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-        return result;
-
-    }
-
-    @Tag(name = "Ext Get", description = "GET methods of External Api to get electronics info")
-    @GetMapping("/checkListById/{id}")
-    public ResponseEntity<Map<String, Object>> checkAPIListById(@PathVariable String id) throws IOException {
-
-        ResponseEntity<Map<String, Object>> result;
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
-
-        WebClient.ResponseSpec responseSpec = client3.get()
-                .uri("https://api.restful-api.dev/objects/" + id)
-                .retrieve();
-
-        JsonNode responseBody = responseSpec.bodyToMono(JsonNode.class).block();
-
-        map.put("data", responseBody);
-        map.put("code", HttpStatus.OK.value());
-        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-        return result;
-
-    }
-
-    @Tag(name = "Ext Get", description = "GET methods of External Api to get electronics info")
-    @GetMapping("/checkSingleObject/{id}")
-    public ResponseEntity<Map<String, Object>> checkAPISingleObject(@PathVariable String id) throws IOException {
-
-        ResponseEntity<Map<String, Object>> result;
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
-
-        WebClient.ResponseSpec responseSpec = client3.get()
-                .uri("https://api.restful-api.dev/objects/" + id)
-                .retrieve();
-
-        JsonNode responseBody = responseSpec.bodyToMono(JsonNode.class).block();
-
-        map.put("data", responseBody);
-        map.put("code", HttpStatus.OK.value());
-        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-        return result;
-    }
-
-    @PostMapping("/redisPost")
-    public ResponseEntity<Map<String, Object>> redisPost() {
-
-        ResponseEntity<Map<String, Object>> result;
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
-
-        WebClient.ResponseSpec responseSpec = client3.get()
-                .uri("https://api.restful-api.dev/objects")
-                .retrieve();
-
-        List<Map<String, Object>> responseBody = responseSpec.bodyToMono(List.class).block();
-
-        if (responseBody.contains("error")) {
-            map.put("message", "error in response of external API");
-            map.put("code", HttpStatus.BAD_REQUEST.value());
-            result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.BAD_REQUEST);
+            map.put("code", HttpStatus.OK.value());
+            map.put("accessToken", accessToken);
+            result = new ResponseEntity<Map<String, Object>>(map,
+                    HttpStatus.OK);
             return result;
         }
-
-        responseBody.stream().filter(x -> x.get("name").toString().contains("iPhone")).forEachOrdered(x -> {
-            String jsonBody;
-            try {
-                jsonBody = new ObjectMapper().writeValueAsString(x);
-                String id = x.get("id").toString();
-                String set = commands.jsonSet("external:" + id, "$", jsonBody);
-                System.out.println(set);
-            } catch (JsonProcessingException e) {
-                e.printStackTrace();
-            }
-
-        });
-
-        // if (set == null) {
-        // map.put("message", "could not create in redis");
-        // map.put("code", HttpStatus.BAD_REQUEST.value());
-        // result = new ResponseEntity<Map<String, Object>>(map,
-        // HttpStatus.BAD_REQUEST);
-        // return result;
-        // }
-
-        map.put("message", "done");
-        map.put("created", responseBody);
-        map.put("code", HttpStatus.OK.value());
-        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-        return result;
-
-    }
-
-    @Tag(name = "Ext Post", description = "Post method of External Api to set electronics info")
-    @PostMapping("/checkAddObject")
-    public ResponseEntity<Map<String, Object>> checkAPIAddObject(@RequestBody Map<String, Object> jString) {
-
-        ResponseEntity<Map<String, Object>> result;
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
-
-        WebClient.ResponseSpec responseSpec = client3.post()
-                .uri("https://api.restful-api.dev/objects")
-                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                .bodyValue(jString)
-                .retrieve();
-
-        Map<String, Object> responseBody = responseSpec.bodyToMono(Map.class).block();
-
-        map.put("message", "done");
-        map.put("created", responseBody);
-        map.put("code", HttpStatus.OK.value());
-        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        map.put("code", HttpStatus.BAD_REQUEST.value());
+        map.put("failed", "refresh token not valid");
+        result = new ResponseEntity<Map<String, Object>>(map,
+                HttpStatus.BAD_REQUEST);
+        System.out.println("\n\nfailed\n\n");
         return result;
     }
 
-    @Tag(name = "Ext Modify", description = "Modify method of External Api to update , delete electronics info")
-    @PutMapping("/checkUpdateObject/{id}")
-    public ResponseEntity<Map<String, Object>> checkUpdateObject(@PathVariable String id,
-            @RequestBody Map<String, Object> jString) {
+    // @Tag(name = "Ext Get", description = "GET methods of External Api to get
+    // electronics info")
+    // @GetMapping("/checkListAll")
+    // public ResponseEntity<Map<String, Object>> checkAPIListAll() {
 
-        ResponseEntity<Map<String, Object>> result;
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
+    // ResponseEntity<Map<String, Object>> result;
+    // Map<String, Object> map = new LinkedHashMap<String, Object>();
 
-        WebClient.ResponseSpec responseSpec = client3.put()
-                .uri("https://api.restful-api.dev/objects/" + id)
-                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                .bodyValue(jString)
-                .retrieve();
+    // WebClient.ResponseSpec responseSpec = client3.get()
+    // .uri("https://api.restful-api.dev/objects")
+    // .retrieve();
 
-        Map<String, Object> responseBody = responseSpec.bodyToMono(Map.class).block();
+    // List<Map<String, Object>> responseBody =
+    // responseSpec.bodyToMono(List.class).block();
 
-        map.put("message", "done");
-        map.put("updated", responseBody);
-        map.put("code", HttpStatus.OK.value());
-        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-        return result;
-    }
+    // map.put("data", responseBody);
+    // map.put("code", HttpStatus.OK.value());
+    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+    // return result;
 
-    @Tag(name = "Ext Modify", description = "Modify method of External Api to update , delete electronics info")
-    @PatchMapping("/checkPartiallyUpdateObject/{id}")
-    public ResponseEntity<Map<String, Object>> checkPartiallyUpdateObject(@PathVariable String id,
-            @RequestBody Map<String, Object> jString) {
+    // }
 
-        ResponseEntity<Map<String, Object>> result;
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
+    // @Tag(name = "Ext Get", description = "GET methods of External Api to get
+    // electronics info")
+    // @GetMapping("/checkListById/{id}")
+    // public ResponseEntity<Map<String, Object>> checkAPIListById(@PathVariable
+    // String id) throws IOException {
 
-        WebClient.ResponseSpec responseSpec = client3.patch()
-                .uri("https://api.restful-api.dev/objects/" + id)
-                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                .bodyValue(jString)
-                .retrieve();
+    // ResponseEntity<Map<String, Object>> result;
+    // Map<String, Object> map = new LinkedHashMap<String, Object>();
 
-        Map<String, Object> responseBody = responseSpec.bodyToMono(Map.class).block();
+    // WebClient.ResponseSpec responseSpec = client3.get()
+    // .uri("https://api.restful-api.dev/objects/" + id)
+    // .retrieve();
 
-        map.put("message", "done");
-        map.put("updated", responseBody);
-        map.put("code", HttpStatus.OK.value());
-        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-        return result;
-    }
+    // JsonNode responseBody = responseSpec.bodyToMono(JsonNode.class).block();
 
-    @Tag(name = "Ext Modify", description = "Modify method of External Api to update , delete electronics info")
-    @DeleteMapping("/checkDeleteObject/{id}")
-    public ResponseEntity<Map<String, Object>> checkDeleteObject(@PathVariable String id) throws IOException {
+    // map.put("data", responseBody);
+    // map.put("code", HttpStatus.OK.value());
+    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+    // return result;
 
-        ResponseEntity<Map<String, Object>> result;
-        Map<String, Object> map = new LinkedHashMap<String, Object>();
+    // }
 
-        WebClient.ResponseSpec responseSpec = client3.delete()
-                .uri("https://api.restful-api.dev/objects/" + id)
-                .retrieve();
+    // @Tag(name = "Ext Get", description = "GET methods of External Api to get
+    // electronics info")
+    // @GetMapping("/checkSingleObject/{id}")
+    // public ResponseEntity<Map<String, Object>> checkAPISingleObject(@PathVariable
+    // String id) throws IOException {
 
-        Map<String, Object> responseBody = responseSpec.bodyToMono(Map.class).block();
+    // ResponseEntity<Map<String, Object>> result;
+    // Map<String, Object> map = new LinkedHashMap<String, Object>();
 
-        map.put("success", responseBody);
-        map.put("code", HttpStatus.OK.value());
-        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-        return result;
-    }
+    // WebClient.ResponseSpec responseSpec = client3.get()
+    // .uri("https://api.restful-api.dev/objects/" + id)
+    // .retrieve();
+
+    // JsonNode responseBody = responseSpec.bodyToMono(JsonNode.class).block();
+
+    // map.put("data", responseBody);
+    // map.put("code", HttpStatus.OK.value());
+    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+    // return result;
+    // }
+
+    // @PostMapping("/redisPost")
+    // public ResponseEntity<Map<String, Object>> redisPost() {
+
+    // ResponseEntity<Map<String, Object>> result;
+    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+    // WebClient.ResponseSpec responseSpec = client3.get()
+    // .uri("https://api.restful-api.dev/objects")
+    // .retrieve();
+
+    // List<Map<String, Object>> responseBody =
+    // responseSpec.bodyToMono(List.class).block();
+
+    // if (responseBody.contains("error")) {
+    // map.put("message", "error in response of external API");
+    // map.put("code", HttpStatus.BAD_REQUEST.value());
+    // result = new ResponseEntity<Map<String, Object>>(map,
+    // HttpStatus.BAD_REQUEST);
+    // return result;
+    // }
+
+    // responseBody.stream().filter(x ->
+    // x.get("name").toString().contains("iPhone")).forEachOrdered(x -> {
+    // String jsonBody;
+    // try {
+    // jsonBody = new ObjectMapper().writeValueAsString(x);
+    // String id = x.get("id").toString();
+    // String set = commands.jsonSet("external:" + id, "$", jsonBody);
+    // System.out.println(set);
+    // } catch (JsonProcessingException e) {
+    // e.printStackTrace();
+    // }
+
+    // });
+
+    // // if (set == null) {
+    // // map.put("message", "could not create in redis");
+    // // map.put("code", HttpStatus.BAD_REQUEST.value());
+    // // result = new ResponseEntity<Map<String, Object>>(map,
+    // // HttpStatus.BAD_REQUEST);
+    // // return result;
+    // // }
+
+    // map.put("message", "done");
+    // map.put("created", responseBody);
+    // map.put("code", HttpStatus.OK.value());
+    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+    // return result;
+
+    // }
+
+    // @Tag(name = "Ext Post", description = "Post method of External Api to set
+    // electronics info")
+    // @PostMapping("/checkAddObject")
+    // public ResponseEntity<Map<String, Object>> checkAPIAddObject(@RequestBody
+    // Map<String, Object> jString) {
+
+    // ResponseEntity<Map<String, Object>> result;
+    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+    // WebClient.ResponseSpec responseSpec = client3.post()
+    // .uri("https://api.restful-api.dev/objects")
+    // .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+    // .bodyValue(jString)
+    // .retrieve();
+
+    // Map<String, Object> responseBody =
+    // responseSpec.bodyToMono(Map.class).block();
+
+    // map.put("message", "done");
+    // map.put("created", responseBody);
+    // map.put("code", HttpStatus.OK.value());
+    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+    // return result;
+    // }
+
+    // @Tag(name = "Ext Modify", description = "Modify method of External Api to
+    // update , delete electronics info")
+    // @PutMapping("/checkUpdateObject/{id}")
+    // public ResponseEntity<Map<String, Object>> checkUpdateObject(@PathVariable
+    // String id,
+    // @RequestBody Map<String, Object> jString) {
+
+    // ResponseEntity<Map<String, Object>> result;
+    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+    // WebClient.ResponseSpec responseSpec = client3.put()
+    // .uri("https://api.restful-api.dev/objects/" + id)
+    // .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+    // .bodyValue(jString)
+    // .retrieve();
+
+    // Map<String, Object> responseBody =
+    // responseSpec.bodyToMono(Map.class).block();
+
+    // map.put("message", "done");
+    // map.put("updated", responseBody);
+    // map.put("code", HttpStatus.OK.value());
+    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+    // return result;
+    // }
+
+    // @Tag(name = "Ext Modify", description = "Modify method of External Api to
+    // update , delete electronics info")
+    // @PatchMapping("/checkPartiallyUpdateObject/{id}")
+    // public ResponseEntity<Map<String, Object>>
+    // checkPartiallyUpdateObject(@PathVariable String id,
+    // @RequestBody Map<String, Object> jString) {
+
+    // ResponseEntity<Map<String, Object>> result;
+    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+    // WebClient.ResponseSpec responseSpec = client3.patch()
+    // .uri("https://api.restful-api.dev/objects/" + id)
+    // .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+    // .bodyValue(jString)
+    // .retrieve();
+
+    // Map<String, Object> responseBody =
+    // responseSpec.bodyToMono(Map.class).block();
+
+    // map.put("message", "done");
+    // map.put("updated", responseBody);
+    // map.put("code", HttpStatus.OK.value());
+    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+    // return result;
+    // }
+
+    // @Tag(name = "Ext Modify", description = "Modify method of External Api to
+    // update , delete electronics info")
+    // @DeleteMapping("/checkDeleteObject/{id}")
+    // public ResponseEntity<Map<String, Object>> checkDeleteObject(@PathVariable
+    // String id) throws IOException {
+
+    // ResponseEntity<Map<String, Object>> result;
+    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+
+    // WebClient.ResponseSpec responseSpec = client3.delete()
+    // .uri("https://api.restful-api.dev/objects/" + id)
+    // .retrieve();
+
+    // Map<String, Object> responseBody =
+    // responseSpec.bodyToMono(Map.class).block();
+
+    // map.put("success", responseBody);
+    // map.put("code", HttpStatus.OK.value());
+    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+    // return result;
+    // }
 
     public Map<String, Object> jsonResponse(SearchResults<String, String> ans) {
 
@@ -754,7 +807,7 @@ public class Controller {
                         try {
                             return new ObjectMapper().readValue(x, Person.class);
                         } catch (Exception e) {
-                            e.printStackTrace();
+                            // e.printStackTrace();
                             return null;
                         }
                     })

@@ -44,7 +44,9 @@ public class SecurityConfig {
                                                                                         ex.getMessage());
                                                                 }))
                                 .authorizeHttpRequests(requests -> requests
-                                                .requestMatchers("/newUser", "/loginUser" , "/refreshToken").permitAll())
+                                                .requestMatchers( "/loginUser" , "/refreshToken").permitAll())
+                                .authorizeHttpRequests(requests -> requests
+                                                .requestMatchers("/checkIntegration").hasAnyRole( "ADMIN"))
                                 .authorizeHttpRequests(requests -> requests
                                                 .requestMatchers(HttpMethod.GET).hasAnyRole("USER", "ADMIN"))
                                 .authorizeHttpRequests(requests -> requests

@@ -68,6 +68,7 @@ public class RSA {
     public String decrypt(String encodedPassword)
             throws InvalidKeyException, NoSuchAlgorithmException, InvalidKeySpecException, IllegalBlockSizeException,
             BadPaddingException {
+        System.out.println("encoded pass in RSA file is --> " + encodedPassword);
         decryptCipher.init(Cipher.DECRYPT_MODE, generatePrivateKeyDecryption());
         byte[] b = Base64.getDecoder().decode(encodedPassword);
         byte[] decryptedMessageBytes = decryptCipher.doFinal(b);

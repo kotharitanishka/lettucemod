@@ -105,7 +105,7 @@ public class JwtUtil {
     }
 
     public String generateAccessToken(String username) {
-        System.out.println("genarating access token --> ");
+        System.out.println("genarating access token --> nothing with print dw");
         System.out.println(claims(username , true));
         Map<String, Object> claims = claims(username , true);
         return generateToken(username, accessExpTime , claims);
@@ -177,7 +177,7 @@ public class JwtUtil {
             }
         } catch (Exception e) {
             System.out.println("\ntoken is not valid\n");
-            e.printStackTrace();
+            //e.printStackTrace();
             
             return false;
         }
