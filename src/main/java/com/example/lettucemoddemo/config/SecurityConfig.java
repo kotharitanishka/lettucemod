@@ -1,6 +1,7 @@
 package com.example.lettucemoddemo.config;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -31,6 +32,9 @@ public class SecurityConfig {
         @Autowired
         UserInfoService userInfoService;
 
+        @Value("${welcome.message}")
+        String messsage;
+
 
         @Bean
         public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -44,7 +48,7 @@ public class SecurityConfig {
                                                                                         ex.getMessage());
                                                                 }))
                                 .authorizeHttpRequests(requests -> requests
-                                                .requestMatchers( "/loginUser" , "/refreshToken").permitAll())
+                                                .requestMatchers( "/loginUser" , "/refreshToken", "/redisPost" , "/redisFetch").permitAll())
                                 .authorizeHttpRequests(requests -> requests
                                                 .requestMatchers("/checkIntegration").hasAnyRole( "ADMIN"))
                                 .authorizeHttpRequests(requests -> requests
@@ -58,7 +62,8 @@ public class SecurityConfig {
                                 .sessionManagement(management -> management
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
-                System.out.println("checking security filter chain config : ");
+                //System.out.println("checking security filter chain config : ");
+                System.out.println(messsage);
                 return http.build();
 
         }

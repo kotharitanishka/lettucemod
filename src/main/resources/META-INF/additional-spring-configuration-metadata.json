@@ -1,0 +1,22 @@
+{"properties": [
+  {
+    "name": "secret.aes-key",
+    "type": "java.lang.String",
+    "description": "A description for 'secret.aes-key'"
+  },
+  {
+    "name": "secret.private-key",
+    "type": "java.lang.String",
+    "description": "A description for 'secret.private-key'"
+  },
+  {
+    "name": "secret.public-key",
+    "type": "java.lang.String",
+    "description": "A description for 'secret.public-key'"
+  },
+  {
+    "name": "welcome.message",
+    "type": "java.lang.String",
+    "description": "A description for 'welcome.message'"
+  }
+]}

@@ -17,6 +17,8 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
@@ -24,14 +26,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class JwtUtil {
 
-
-
-    private String secretPublicKey = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtEmrrVOiFNiYbl/B2MopjEOfO8sxE7KboQsxnuYLcg6zoSWRtrxI3+Z2Tzltjx7ULeaSp5lG59LgPOQmQZ5S2hQdX0OIUHCP3MLPHB4a6pO2b7qjUXRqVjT1N8jZZIqXJBb1HdhvDSxvAkIY3Rohsfwzk25r9AlmqamffUndg6wsDPLuQAJdgiA9lgsumlhZdM+YBaGcKzHip6WOmYttXyjuD+1Z7z3GzAkuXtdlpvoC/D8p+VndB22sMQ8ZJOqsNfmCk7jIeCzS7daVfDh+lHtBSgi+Nb4NTh8oZwl3SW05hpL043VPXE79R+XTAv9TdtN8Do3Gri4q9Ax8IcphGQIDAQAB";
-    private String secretPrivateKey = "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC0SautU6IU2JhuX8HYyimMQ587yzETspuhCzGe5gtyDrOhJZG2vEjf5nZPOW2PHtQt5pKnmUbn0uA85CZBnlLaFB1fQ4hQcI/cws8cHhrqk7ZvuqNRdGpWNPU3yNlkipckFvUd2G8NLG8CQhjdGiGx/DOTbmv0CWapqZ99Sd2DrCwM8u5AAl2CID2WCy6aWFl0z5gFoZwrMeKnpY6Zi21fKO4P7VnvPcbMCS5e12Wm+gL8Pyn5Wd0HbawxDxkk6qw1+YKTuMh4LNLt1pV8OH6Ue0FKCL41vg1OHyhnCXdJbTmGkvTjdU9cTv1H5dMC/1N203wOjcauLir0DHwhymEZAgMBAAECggEAFrEHE05pd2eOQqYkHIh6vkAXSfat0KWJrQq0TiRKNdWKil0o1UUm2aIvgJKL1ZhdwFaQXYPknB0QmC68b0SMImKnEmx05cWlIHYXN0TFbSz2U2MRrJjodr08+APRnjP2CKwoYdScoEiCwwKqunl62uS8C8cO01ezkjsv6xxhmHGGWUNKNAzb6klv8AEMzxSZKvY1Qhslzz/c8mlaNsleKUvJ74c3QIPvGVnjntuElL1MfyZTG7IFQbGUl0lKUR5CMVEHnWBMFRzmR3QPjrhbnCKlSNEIdSNuRcwPJFVfwqm57Fo74CEAVcuzeLZ336IVjU4C0o5Q6nPC6tlwPqAheQKBgQD9lI7pL8gjCjtWyZSc0OY+QOVwJcnlIuyG/Vk1HaaONjqFLP5g+BRUFQGJQgL/lZ3gt6/fUFojVSDMXh2ECBmbhoLBFPz2eFi918kexilI6yjBBZPFsSmamUXHMrLDDEg8XKl93k9qwwvDwNJSAkrN1lC4CEsjIgmHoGDOwt0J4wKBgQC2AhMYotjCBAdC00051Ck0+ctnPR9I9/913wc+2fGrlEtacfh3PwYJ1ngQ7UTYxDBrH/Q14vVkYQDO6fRzNZXu6VZ92J1cRQcFFOdx8ul13lfmBJONgLbafegFGaHeYjdydD89Tcjq3SAYRAAZV3XltesFDpApKWNugadm20jJ0wKBgQCFRuhZ3Rg2enE3qxkl1pG81IUCjYnwmYtxY4TYau4YPp5BUqWcN6cPjj7RclV7GZrx+flAyM2nVl23rBudQlibKnZcnvhZXmVd2iVFvGcEgTxZPuIs/HFeZQKMsLPN2g25VAZtNkPNXBg52YVxPu0sBGFGaG19WK1jkEJxSW+9ewKBgQCFSQWk//ROOFb85/Jgy+6VPexnoQodDIfGUNpke4QQC1wXUukKoluQrr9kXe0R9LIkcNUM9TSRGrxVylxaVj6DI9tT82JhZKdcYE+RUbsHtxiVeHp5oG3HmXZk7b1tNm22YkzBXwoofGB5hKqx5CuRWeRO4rhNfGK1VTs7BpDKQwKBgGJdeRNfJLgRGvLaHqeB8qV1oFrNZdVLwuw9WGxe4e/Z3Lx+P9NL/SN7hPI9VDS8eGkuf6UF+6XZs/Z/xKjpJrhXl7te5xI4oijjGUel0P4F4Z/9gN7JUy9AfJ6rQfJPD5Nk3eIPN5ObKr2GR53hju/sc8Fac//kBorUPToZGwUQ";
-    //private String SECRET = "5367566B59703373367639792F423F4528482B4D6251655468576D5A71347437";
-
     long accessExpTime = 1000 * 60 * 1;
     long refreshExpTime = 1000 * 60 * 5;
+
+
+    // @Value("${secret.aes-key}")
+    // private String SECRET ;
 
     // private Key getSignKey() {
     // byte[] keyBytes = Decoders.BASE64.decode(SECRET);
@@ -57,6 +57,12 @@ public class JwtUtil {
     // private String SECRET =
     // "5367566B59703373367639792F423F4528482B4D6251655468576D5A71347437";
 
+    @Value("${secret.private-key}")
+    private String secretPrivateKey ;
+
+    @Value("${secret.public-key}")
+    private String secretPublicKey ;
+
     public PublicKey generateJwtKeyDecryption() throws NoSuchAlgorithmException, InvalidKeySpecException {
         KeyFactory keyFactory = KeyFactory.getInstance("RSA");
         byte[] keyBytes = Decoders.BASE64.decode(secretPublicKey);
@@ -78,7 +84,7 @@ public class JwtUtil {
                     .setSubject(username)
                     .setExpiration(new Date(System.currentTimeMillis() + time))
                     .signWith(generateJwtKeyEncryption(), SignatureAlgorithm.RS256).compact();
-            //System.out.println("token ---> " + token);
+            
             System.out.println(" token gen time ---> " + new Date(System.currentTimeMillis()));
             System.out.println(" token valid till time ---> " + new Date(System.currentTimeMillis() + time));
 

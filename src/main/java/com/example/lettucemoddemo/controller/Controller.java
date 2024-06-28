@@ -7,6 +7,7 @@ import com.example.lettucemoddemo.model.UserAuth;
 import com.example.lettucemoddemo.utils.JwtUtil;
 import com.example.lettucemoddemo.utils.RSA;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -19,7 +20,6 @@ import com.redis.lettucemod.search.Document;
 import com.redis.lettucemod.search.Field;
 import com.redis.lettucemod.search.SearchOptions;
 import com.redis.lettucemod.search.SearchResults;
-import com.redis.lettucemod.search.TagField;
 import com.redis.lettucemod.search.SearchOptions.SortBy;
 
 import io.lettuce.core.RedisURI;
@@ -32,15 +32,27 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import okhttp3.OkHttpClient;
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpRequest.BodyPublishers;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Map.Entry;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -55,12 +67,9 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.User;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -240,220 +249,159 @@ public class Controller {
         return result;
     }
 
-    // @Tag(name = "Ext Get", description = "GET methods of External Api to get
-    // electronics info")
-    // @GetMapping("/checkListAll")
-    // public ResponseEntity<Map<String, Object>> checkAPIListAll() {
+    @PostMapping("/redisPost")
+    public ResponseEntity<Map<String, Object>> redisPost() throws IOException, InterruptedException {
 
-    // ResponseEntity<Map<String, Object>> result;
-    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
 
-    // WebClient.ResponseSpec responseSpec = client3.get()
-    // .uri("https://api.restful-api.dev/objects")
-    // .retrieve();
+        SimpleDateFormat formatter = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss:SSS");
 
-    // List<Map<String, Object>> responseBody =
-    // responseSpec.bodyToMono(List.class).block();
+        // Thread.sleep(15000);
 
-    // map.put("data", responseBody);
-    // map.put("code", HttpStatus.OK.value());
-    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-    // return result;
+        long begin = System.currentTimeMillis();
+        String timestampBegin = formatter.format(begin);
+        System.out.println("begin time in simple format : " + timestampBegin + " and in epoch time : " + begin);
 
-    // }
+        List<Thread> threadApi = new ArrayList<>();
 
-    // @Tag(name = "Ext Get", description = "GET methods of External Api to get
-    // electronics info")
-    // @GetMapping("/checkListById/{id}")
-    // public ResponseEntity<Map<String, Object>> checkAPIListById(@PathVariable
-    // String id) throws IOException {
+        for (Integer i = 1; i <= 500; i++) {
 
-    // ResponseEntity<Map<String, Object>> result;
-    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+            Integer limit = 10;
 
-    // WebClient.ResponseSpec responseSpec = client3.get()
-    // .uri("https://api.restful-api.dev/objects/" + id)
-    // .retrieve();
+            String stringURL = "https://jsonplaceholder.typicode.com/photos?_page=" + i.toString() + "&_limit=" + limit.toString();
 
-    // JsonNode responseBody = responseSpec.bodyToMono(JsonNode.class).block();
+            AtomicInteger index = new AtomicInteger(((i-1) * limit) + 1);
+            Runnable task = () -> {
 
-    // map.put("data", responseBody);
-    // map.put("code", HttpStatus.OK.value());
-    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-    // return result;
+                WebClient.ResponseSpec responseSpec = client3.get()
+                        .uri(stringURL)
+                        .retrieve();
 
-    // }
+                List<Map<String, Object>> responseBody = responseSpec.bodyToMono(List.class).block();
 
-    // @Tag(name = "Ext Get", description = "GET methods of External Api to get
-    // electronics info")
-    // @GetMapping("/checkSingleObject/{id}")
-    // public ResponseEntity<Map<String, Object>> checkAPISingleObject(@PathVariable
-    // String id) throws IOException {
+                //System.out.println("number is -->" + responseBody.size());
 
-    // ResponseEntity<Map<String, Object>> result;
-    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+                responseBody.stream().forEach(x -> {
+                    try {
+                        String jsonBody = new ObjectMapper().writeValueAsString(x);
+                        String id = x.get("title").toString();
+                        String set = commands.jsonSet("Testing:" + id, "$", jsonBody);
+                        //System.out.println(set);
+                        //System.out.println("key is --> " + index);
+                        String hkey = "keysTesting:";
+                        commands.hset(hkey, index.toString(), id);
+                        index.getAndIncrement();
 
-    // WebClient.ResponseSpec responseSpec = client3.get()
-    // .uri("https://api.restful-api.dev/objects/" + id)
-    // .retrieve();
+                    } catch (JsonProcessingException e) {
+                        System.out.println("Error : --> " + index);
+                    }
+                });
+                
 
-    // JsonNode responseBody = responseSpec.bodyToMono(JsonNode.class).block();
+            };
+            
 
-    // map.put("data", responseBody);
-    // map.put("code", HttpStatus.OK.value());
-    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-    // return result;
-    // }
+            Thread myThread = new Thread(task);
+            // Thread myThread = Thread.ofVirtual().unstarted(task);
+            threadApi.add(myThread);
 
-    // @PostMapping("/redisPost")
-    // public ResponseEntity<Map<String, Object>> redisPost() {
+        }
 
-    // ResponseEntity<Map<String, Object>> result;
-    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+        threadApi.stream().forEach(thread -> {
+            thread.start();
+        });
+        for (Thread thread : threadApi) {
+            thread.join();
+        }
 
-    // WebClient.ResponseSpec responseSpec = client3.get()
-    // .uri("https://api.restful-api.dev/objects")
-    // .retrieve();
+        long end = System.currentTimeMillis();
+        String timestampEnd = formatter.format(begin);
+        System.out.println("\nend time in simple format: " + timestampEnd + " and in epoch time : " + end);
 
-    // List<Map<String, Object>> responseBody =
-    // responseSpec.bodyToMono(List.class).block();
+        // Thread.sleep(5000);
 
-    // if (responseBody.contains("error")) {
-    // map.put("message", "error in response of external API");
-    // map.put("code", HttpStatus.BAD_REQUEST.value());
-    // result = new ResponseEntity<Map<String, Object>>(map,
-    // HttpStatus.BAD_REQUEST);
-    // return result;
-    // }
+        long total = end - begin;
+        System.out.println("\n\ntotal time taken in seconds --> " + total / 1000.0);
+        // System.out.println("Java 21 Virtual threads");
+        System.out.println("Java 17 multithreading");
 
-    // responseBody.stream().filter(x ->
-    // x.get("name").toString().contains("iPhone")).forEachOrdered(x -> {
-    // String jsonBody;
-    // try {
-    // jsonBody = new ObjectMapper().writeValueAsString(x);
-    // String id = x.get("id").toString();
-    // String set = commands.jsonSet("external:" + id, "$", jsonBody);
-    // System.out.println(set);
-    // } catch (JsonProcessingException e) {
-    // e.printStackTrace();
-    // }
+        map.put("message", "done");
+        map.put("java version", 21);
+        map.put("time taken in secs", (total / 1000.0));
+        map.put("code", HttpStatus.OK.value());
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
 
-    // });
+    }
 
-    // // if (set == null) {
-    // // map.put("message", "could not create in redis");
-    // // map.put("code", HttpStatus.BAD_REQUEST.value());
-    // // result = new ResponseEntity<Map<String, Object>>(map,
-    // // HttpStatus.BAD_REQUEST);
-    // // return result;
-    // // }
+    @GetMapping("/redisFetch")
+    public ResponseEntity<Map<String, Object>> redisFetch() throws IOException, InterruptedException {
 
-    // map.put("message", "done");
-    // map.put("created", responseBody);
-    // map.put("code", HttpStatus.OK.value());
-    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-    // return result;
+        ResponseEntity<Map<String, Object>> result;
+        Map<String, Object> map = new LinkedHashMap<String, Object>();
 
-    // }
+        SimpleDateFormat formatter = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss:SSS");
 
-    // @Tag(name = "Ext Post", description = "Post method of External Api to set
-    // electronics info")
-    // @PostMapping("/checkAddObject")
-    // public ResponseEntity<Map<String, Object>> checkAPIAddObject(@RequestBody
-    // Map<String, Object> jString) {
+        // Thread.sleep(15000);
 
-    // ResponseEntity<Map<String, Object>> result;
-    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+        long begin = System.currentTimeMillis();
+        String timestampBegin = formatter.format(begin);
+        System.out.println("begin time in simple format : " + timestampBegin + " and in epoch time : " + begin);
 
-    // WebClient.ResponseSpec responseSpec = client3.post()
-    // .uri("https://api.restful-api.dev/objects")
-    // .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-    // .bodyValue(jString)
-    // .retrieve();
+        List<Thread> threadApi = new ArrayList<>();
+        List<JsonNode> response = new ArrayList<>();
 
-    // Map<String, Object> responseBody =
-    // responseSpec.bodyToMono(Map.class).block();
+        String hkey = "keysTesting:";
+        for (Integer i = 1; i <= 5000 ; i++) {
 
-    // map.put("message", "done");
-    // map.put("created", responseBody);
-    // map.put("code", HttpStatus.OK.value());
-    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-    // return result;
-    // }
+            AtomicInteger index = new AtomicInteger(i);
+            Runnable task = () -> {
+            String key = "Testing:" + commands.hget(hkey, index.toString());
+            //System.out.println(key);
+            String stringJSON = commands.jsonGet(key, "$");
+            try {
+                JsonNode node = (ArrayNode) new ObjectMapper().readTree(stringJSON);
+                response.add(node.get(0).get("url"));
+            } catch (Exception e) {
+                System.out.println("ERROR : string to json convert --> " + index + stringJSON );
+            } 
+            };
 
-    // @Tag(name = "Ext Modify", description = "Modify method of External Api to
-    // update , delete electronics info")
-    // @PutMapping("/checkUpdateObject/{id}")
-    // public ResponseEntity<Map<String, Object>> checkUpdateObject(@PathVariable
-    // String id,
-    // @RequestBody Map<String, Object> jString) {
+            //Thread myThread = new Thread(task);
+            Thread myThread = Thread.ofVirtual().unstarted(task);
+            threadApi.add(myThread);
 
-    // ResponseEntity<Map<String, Object>> result;
-    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+        }
+        ;
 
-    // WebClient.ResponseSpec responseSpec = client3.put()
-    // .uri("https://api.restful-api.dev/objects/" + id)
-    // .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-    // .bodyValue(jString)
-    // .retrieve();
+        threadApi.stream().forEach(thread -> {
+            thread.start();
+        });
+        for (Thread thread : threadApi) {
+            thread.join();
+        }
 
-    // Map<String, Object> responseBody =
-    // responseSpec.bodyToMono(Map.class).block();
+        long end = System.currentTimeMillis();
+        String timestampEnd = formatter.format(begin);
+        System.out.println("\nend time in simple format: " + timestampEnd + " and in epoch time : " + end);
 
-    // map.put("message", "done");
-    // map.put("updated", responseBody);
-    // map.put("code", HttpStatus.OK.value());
-    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-    // return result;
-    // }
+        // Thread.sleep(5000);
 
-    // @Tag(name = "Ext Modify", description = "Modify method of External Api to
-    // update , delete electronics info")
-    // @PatchMapping("/checkPartiallyUpdateObject/{id}")
-    // public ResponseEntity<Map<String, Object>>
-    // checkPartiallyUpdateObject(@PathVariable String id,
-    // @RequestBody Map<String, Object> jString) {
+        long total = end - begin;
+        System.out.println("\n\ntotal time taken in seconds --> " + total / 1000.0);
+        System.out.println("Java 21 Virtual threads");
+        //System.out.println("Java 17 multithreading");
 
-    // ResponseEntity<Map<String, Object>> result;
-    // Map<String, Object> map = new LinkedHashMap<String, Object>();
+        map.put("message", "done");
+        map.put("java version", 21);
+        map.put("time taken in secs", (total / 1000.0));
+        map.put("code", HttpStatus.OK.value());
+        map.put("response", response);
+        result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+        return result;
 
-    // WebClient.ResponseSpec responseSpec = client3.patch()
-    // .uri("https://api.restful-api.dev/objects/" + id)
-    // .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-    // .bodyValue(jString)
-    // .retrieve();
-
-    // Map<String, Object> responseBody =
-    // responseSpec.bodyToMono(Map.class).block();
-
-    // map.put("message", "done");
-    // map.put("updated", responseBody);
-    // map.put("code", HttpStatus.OK.value());
-    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-    // return result;
-    // }
-
-    // @Tag(name = "Ext Modify", description = "Modify method of External Api to
-    // update , delete electronics info")
-    // @DeleteMapping("/checkDeleteObject/{id}")
-    // public ResponseEntity<Map<String, Object>> checkDeleteObject(@PathVariable
-    // String id) throws IOException {
-
-    // ResponseEntity<Map<String, Object>> result;
-    // Map<String, Object> map = new LinkedHashMap<String, Object>();
-
-    // WebClient.ResponseSpec responseSpec = client3.delete()
-    // .uri("https://api.restful-api.dev/objects/" + id)
-    // .retrieve();
-
-    // Map<String, Object> responseBody =
-    // responseSpec.bodyToMono(Map.class).block();
-
-    // map.put("success", responseBody);
-    // map.put("code", HttpStatus.OK.value());
-    // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-    // return result;
-    // }
+    }
 
     public Map<String, Object> jsonResponse(SearchResults<String, String> ans) {
 
@@ -814,13 +762,13 @@ public class Controller {
                     .collect(Collectors.toList());
             System.out.println("\n plist by streams ==> " + plist);
 
-            if (plist == null) {
-                map.put("data", List.of());
-                map.put("error", HttpStatus.BAD_REQUEST.name());
-                map.put("code", HttpStatus.BAD_REQUEST.value());
-                result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
-                return result;
-            }
+            // if (plist == null) {
+            // map.put("data", List.of());
+            // map.put("error", HttpStatus.BAD_REQUEST.name());
+            // map.put("code", HttpStatus.BAD_REQUEST.value());
+            // result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
+            // return result;
+            // }
 
             map.put("data", plist);
             map.put("success", HttpStatus.OK.name());

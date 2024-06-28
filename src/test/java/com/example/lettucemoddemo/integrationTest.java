@@ -1,27 +1,17 @@
 package com.example.lettucemoddemo;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.Spy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.ImportAutoConfiguration;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.web.servlet.ResultActions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 import com.example.lettucemoddemo.config.SecurityConfig;
 import com.example.lettucemoddemo.controller.Controller;
 import com.example.lettucemoddemo.model.Person;
@@ -30,11 +20,6 @@ import com.example.lettucemoddemo.utils.JwtUtil;
 import com.example.lettucemoddemo.utils.RSA;
 import com.example.lettucemoddemo.utils.UserInfoService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.redis.lettucemod.RedisModulesClient;
-import com.redis.lettucemod.api.StatefulRedisModulesConnection;
-import com.redis.lettucemod.api.sync.RedisModulesCommands;
-
-import io.lettuce.core.RedisURI;
 
 @ImportAutoConfiguration(SecurityConfig.class)
 @WebMvcTest(Controller.class)
@@ -81,9 +66,9 @@ public class integrationTest {
 
        String encryptedRSAPass =
        "Xgh8L7Aizhc5FiW/8hYYzQ3Lui2Y4dbpf2NyhtqZltGxePlJn9fyuJDovLR5hW0ANzXksxNAaJ51WIcEUz7YFtklb6T5V8FbBAHBOvsjudu/Dws0OPLv1wdU4lxTQNwBrf4HIvYysTQLMYFkUnyuPdKWjoq2hz8Uquik+BBsymNwXouUGhaRnM/0Faq54Dd6Pvz8ckC2BBgoXKxBg/Zf6INdq4P+eIYch5Rs9vmpSI1TMptxqmzPRRRB60ne94Bu++pCAUIab6zdiXu05ZSNCv2iQ5Bz36+YHJc+On/YSYVwKS1VxSsL9b73x6m43DAvpezVw966FERZ/oSESpcr5w==";
-       String decryptedRSAPass = "user@123";
-       String bcryptEncodedPass =
-       "$2a$10$en1nRzt42zZtodFgu9upvuUMo8C97ocabWRypcPFIW8DzcfzEOAg2";
+       // String decryptedRSAPass = "user@123";
+       // String bcryptEncodedPass =
+       // "$2a$10$en1nRzt42zZtodFgu9upvuUMo8C97ocabWRypcPFIW8DzcfzEOAg2";
        String username = "bhavik";
 
        UserAuth user1 = new UserAuth();
