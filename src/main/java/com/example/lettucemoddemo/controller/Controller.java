@@ -256,9 +256,6 @@ public class Controller {
         Map<String, Object> map = new LinkedHashMap<String, Object>();
 
         SimpleDateFormat formatter = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss:SSS");
-
-        // Thread.sleep(15000);
-
         long begin = System.currentTimeMillis();
         String timestampBegin = formatter.format(begin);
         System.out.println("begin time in simple format : " + timestampBegin + " and in epoch time : " + begin);
@@ -268,10 +265,10 @@ public class Controller {
         for (Integer i = 1; i <= 500; i++) {
 
             Integer limit = 10;
+            String stringURL = "https://jsonplaceholder.typicode.com/photos?_page=" + i.toString() + "&_limit="
+                    + limit.toString();
+            AtomicInteger index = new AtomicInteger(((i - 1) * limit) + 1);
 
-            String stringURL = "https://jsonplaceholder.typicode.com/photos?_page=" + i.toString() + "&_limit=" + limit.toString();
-
-            AtomicInteger index = new AtomicInteger(((i-1) * limit) + 1);
             Runnable task = () -> {
 
                 WebClient.ResponseSpec responseSpec = client3.get()
@@ -280,15 +277,12 @@ public class Controller {
 
                 List<Map<String, Object>> responseBody = responseSpec.bodyToMono(List.class).block();
 
-                //System.out.println("number is -->" + responseBody.size());
-
                 responseBody.stream().forEach(x -> {
                     try {
                         String jsonBody = new ObjectMapper().writeValueAsString(x);
                         String id = x.get("title").toString();
                         String set = commands.jsonSet("Testing:" + id, "$", jsonBody);
-                        //System.out.println(set);
-                        //System.out.println("key is --> " + index);
+
                         String hkey = "keysTesting:";
                         commands.hset(hkey, index.toString(), id);
                         index.getAndIncrement();
@@ -297,10 +291,7 @@ public class Controller {
                         System.out.println("Error : --> " + index);
                     }
                 });
-                
-
             };
-            
 
             Thread myThread = new Thread(task);
             // Thread myThread = Thread.ofVirtual().unstarted(task);
@@ -313,13 +304,12 @@ public class Controller {
         });
         for (Thread thread : threadApi) {
             thread.join();
+            ;
         }
 
         long end = System.currentTimeMillis();
         String timestampEnd = formatter.format(begin);
         System.out.println("\nend time in simple format: " + timestampEnd + " and in epoch time : " + end);
-
-        // Thread.sleep(5000);
 
         long total = end - begin;
         System.out.println("\n\ntotal time taken in seconds --> " + total / 1000.0);
@@ -327,7 +317,7 @@ public class Controller {
         System.out.println("Java 17 multithreading");
 
         map.put("message", "done");
-        map.put("java version", 21);
+        map.put("java version", 17);
         map.put("time taken in secs", (total / 1000.0));
         map.put("code", HttpStatus.OK.value());
         result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
@@ -342,38 +332,51 @@ public class Controller {
         Map<String, Object> map = new LinkedHashMap<String, Object>();
 
         SimpleDateFormat formatter = new SimpleDateFormat("dd-MM-yyyy HH:mm:ss:SSS");
-
-        // Thread.sleep(15000);
-
         long begin = System.currentTimeMillis();
         String timestampBegin = formatter.format(begin);
         System.out.println("begin time in simple format : " + timestampBegin + " and in epoch time : " + begin);
 
         List<Thread> threadApi = new ArrayList<>();
         List<JsonNode> response = new ArrayList<>();
+        List<String> stringResponse = new ArrayList<>();
 
         String hkey = "keysTesting:";
-        for (Integer i = 1; i <= 5000 ; i++) {
+        Integer n = 160000;
+        // String duptimes = " 6";
+        for (Integer i = 1; i <= n; i++) {
 
             AtomicInteger index = new AtomicInteger(i);
+            // AtomicInteger dupindex = new AtomicInteger(n+i);
             Runnable task = () -> {
-            String key = "Testing:" + commands.hget(hkey, index.toString());
-            //System.out.println(key);
-            String stringJSON = commands.jsonGet(key, "$");
-            try {
-                JsonNode node = (ArrayNode) new ObjectMapper().readTree(stringJSON);
-                response.add(node.get(0).get("url"));
-            } catch (Exception e) {
-                System.out.println("ERROR : string to json convert --> " + index + stringJSON );
-            } 
+                String oldId = commands.hget(hkey, index.toString());
+                String key = "Testing:" + oldId;
+
+                String stringJSON = commands.jsonGet(key, "$");
+                stringResponse.add(stringJSON);
+
+                try {
+                    JsonNode node = (ArrayNode) new ObjectMapper().readTree(stringJSON);
+                    response.add(node.get(0));
+
+                    // String newId = (oldId + duptimes);
+                    // String set = commands.jsonSet("Testing:" + newId, "$",
+                    // node.get(0).toString());
+                    // String dupkey = "keysTesting:";
+                    // commands.hset(dupkey, dupindex.toString(), newId);
+                    // dupindex.getAndIncrement();
+
+                    index.getAndIncrement();
+
+                } catch (Exception e) {
+                    System.out.println("ERROR : string to json convert --> " + index + stringJSON);
+                }
             };
 
-            //Thread myThread = new Thread(task);
-            Thread myThread = Thread.ofVirtual().unstarted(task);
+            Thread myThread = new Thread(task);
+            //Thread myThread = Thread.ofVirtual().unstarted(task);
             threadApi.add(myThread);
 
         }
-        ;
 
         threadApi.stream().forEach(thread -> {
             thread.start();
@@ -386,8 +389,6 @@ public class Controller {
         String timestampEnd = formatter.format(begin);
         System.out.println("\nend time in simple format: " + timestampEnd + " and in epoch time : " + end);
 
-        // Thread.sleep(5000);
-
         long total = end - begin;
         System.out.println("\n\ntotal time taken in seconds --> " + total / 1000.0);
         System.out.println("Java 21 Virtual threads");
@@ -397,6 +398,7 @@ public class Controller {
         map.put("java version", 21);
         map.put("time taken in secs", (total / 1000.0));
         map.put("code", HttpStatus.OK.value());
+        map.put("String response", stringResponse);
         map.put("response", response);
         result = new ResponseEntity<Map<String, Object>>(map, HttpStatus.OK);
         return result;
